@@ -7,7 +7,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Missing Supabase URL or Anon Key in environment variables");
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true, // Automatically detect OAuth tokens in URL hash
+  },
+});
 
 // Types for database tables
 export interface UserProfile {

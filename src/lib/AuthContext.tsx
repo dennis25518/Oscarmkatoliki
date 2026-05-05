@@ -14,49 +14,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    const initializeAuth = async () => {
-      try {
-        const { data } = await supabase.auth.getSession();
-        setUser(data.session?.user || null);
-        
-        // Clean up hash if present
-        if (window.location.hash.includes("access_token")) {
-          window.history.replaceState({}, document.title, window.location.pathname);
-        }
-      } catch (error) {
-        console.error("Auth initialization failed:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    initializeAuth();
-
-    // Listen for auth state changes (Supabase automatically handles hash parsing)
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setUser(session?.user || null);
-      
-      // Clean up hash after login
-      if (event === "SIGNED_IN" && window.location.hash.includes("access_token")) {
-        window.history.replaceState({}, document.title, window.location.pathname);
-      }
+    // Get initial session (Supabase automatically detects tokens in URL)
+    supabase.auth.getSession().then(({ data }) => {
+      setUser(data.session?.user || null);
+      setLoading(false);
     });
 
-    return () => {
-      subscription?.unsubscribe();
-    };
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (!error) {
-      setUser(null);
-    } else {
-      throw error;
-    }
+    await supabase.auth.signOut();
+    setUser(null);
   };
 
   return (
