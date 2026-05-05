@@ -213,22 +213,30 @@ export function HomePage() {
                   {/* Book Image Container */}
                   <div className="relative bg-white rounded-xl shadow-2xl p-6 transform hover:scale-105 transition duration-300">
                     <div className="w-64 h-96 bg-gradient-to-br from-amber-100 to-yellow-100 rounded-lg flex items-center justify-center overflow-hidden">
-                      <img
-                        src={
-                          products.find(
-                            (p) =>
-                              p.name.toLowerCase().includes("sauti") ||
-                              p.name.toLowerCase().includes("mama"),
-                          )?.image || ""
-                        }
-                        alt="Sauti Ya Mama"
+                      {products.find(
+                        (p) =>
+                          p.name.toLowerCase().includes("sauti") ||
+                          p.name.toLowerCase().includes("mama"),
+                      )?.image ? (
+                        <img
+                          src={
+                            products.find(
+                              (p) =>
+                                p.name.toLowerCase().includes("sauti") ||
+                                p.name.toLowerCase().includes("mama"),
+                            )?.image || ""
+                          }
+                          alt="Sauti Ya Mama"
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src =
                             'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 400"%3E%3Crect fill="%23fef3c7" width="300" height="400"/%3E%3Ctext x="50%25" y="50%25" font-size="24" fill="%23b45309" text-anchor="middle" dominant-baseline="middle" font-weight="bold"%3E📕 Sauti Ya Mama %3C/text%3E%3C/svg%3E';
                         }}
-                      />
-                    </div>
+                      />                      ) : (
+                        <div className="flex items-center justify-center h-full text-amber-800">
+                          <span className="text-4xl">📕</span>
+                        </div>
+                      )}                    </div>
                   </div>
                 </div>
               </div>
