@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiSearch } from "react-icons/fi";
 import { products as productsApi } from "../lib/supabaseClient";
 import { useToast } from "../components/Toast";
+import { ProductCardSkeleton } from "../components/Skeleton";
 
 interface Product {
   id: number;
@@ -152,13 +153,10 @@ export function ProductsCategoryPage() {
       <div className="bg-gray-50 py-12 min-h-screen">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {loading ? (
-            <div className="text-center py-24">
-              <div className="inline-block">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-700 mb-4"></div>
-                <p className="text-gray-600 text-base font-medium">
-                  Inakupakia bidhaa...
-                </p>
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <ProductCardSkeleton key={i} />
+              ))}
             </div>
           ) : filteredProducts.length === 0 ? (
             <div className="text-center py-24">

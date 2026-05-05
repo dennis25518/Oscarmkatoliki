@@ -8,6 +8,7 @@ import {
   profiles,
 } from "../lib/supabaseClient";
 import type { ProductComment } from "../lib/supabaseClient";
+import { CommentSkeleton } from "./Skeleton";
 
 interface CommentSectionProps {
   productId: number;
@@ -199,8 +200,10 @@ export function CommentSection({ productId }: CommentSectionProps) {
 
       {/* Comments list – always first */}
       {loadingComments ? (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-700 border-t-transparent" />
+        <div className="space-y-6 mb-12">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <CommentSkeleton key={i} />
+          ))}
         </div>
       ) : commentList.length === 0 ? (
         <div className="text-center py-10 text-gray-400">
@@ -234,8 +237,12 @@ export function CommentSection({ productId }: CommentSectionProps) {
                   </div>
                   <div>
                     <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-bold text-black text-sm">{c.user_name}</span>
-                      <span className="text-xs text-gray-400">{formatDate(c.created_at)}</span>
+                      <span className="font-bold text-black text-sm">
+                        {c.user_name}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {formatDate(c.created_at)}
+                      </span>
                     </div>
                     <StarRating value={c.rating} readOnly size={14} />
                   </div>
@@ -253,7 +260,9 @@ export function CommentSection({ productId }: CommentSectionProps) {
 
               {/* Body left, proof image right – same row */}
               <div className="flex items-start gap-4">
-                <p className="text-gray-700 text-sm leading-relaxed flex-1">{c.body}</p>
+                <p className="text-gray-700 text-sm text-left leading-relaxed flex-1">
+                  {c.body}
+                </p>
                 {c.proof_image_url && (
                   <a
                     href={c.proof_image_url}
@@ -377,7 +386,6 @@ export function CommentSection({ productId }: CommentSectionProps) {
           </a>
         </div>
       )}
-
     </div>
   );
 }

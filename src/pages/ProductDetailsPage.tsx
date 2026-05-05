@@ -5,6 +5,7 @@ import type { Product } from "../lib/supabaseClient";
 import Footer from "../components/Footer";
 import { useToast } from "../components/Toast";
 import { CommentSection } from "../components/CommentSection";
+import { ProductDetailSkeleton } from "../components/Skeleton";
 
 export function ProductDetailsPage() {
   const { id } = useParams();
@@ -75,14 +76,7 @@ export function ProductDetailsPage() {
 
   // Loading state
   if (loading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-700 mx-auto mb-4"></div>
-          <p className="text-gray-600">Kupakua kozi...</p>
-        </div>
-      </div>
-    );
+    return <ProductDetailSkeleton />;
   }
 
   // Error state

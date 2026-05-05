@@ -14,6 +14,7 @@ import {
   FiLogOut,
   FiEdit2,
 } from "react-icons/fi";
+import { ProfileSkeleton } from "../components/Skeleton";
 import { useAuth } from "../lib/AuthContext";
 import {
   profiles,
@@ -317,13 +318,7 @@ export function UserProfilePage() {
   ];
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 text-lg">Tafadhali Subiri...</p>
-        </div>
-      </div>
-    );
+    return <ProfileSkeleton />;
   }
 
   return (
