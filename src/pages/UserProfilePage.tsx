@@ -807,15 +807,32 @@ export function UserProfilePage() {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        {paymentMethods.map((payment) => (
+                        {paymentMethods.map((payment) => {
+                          const networkImageMap: Record<string, string> = {
+                            "M-Pesa": "/Asset/mpesa.png",
+                            "Airtel Money": "/Asset/airtelmoney.png",
+                            "TIGO Pesa": "/Asset/mixx.png",
+                            "Halo Pesa": "/Asset/halopesa.png",
+                          };
+                          const networkImg =
+                            networkImageMap[payment.network_name] ?? null;
+                          return (
                           <div
                             key={payment.id || "payment-method"}
                             className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition bg-gradient-to-r from-amber-50 to-transparent"
                           >
                             <div className="flex items-center gap-4">
-                              <div className="w-12 h-12 bg-gradient-to-br from-amber-700 to-amber-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                                📱
-                              </div>
+                              {networkImg ? (
+                                <img
+                                  src={networkImg}
+                                  alt={payment.network_name}
+                                  className="w-12 h-12 rounded-lg object-contain bg-white border border-gray-100 p-1"
+                                />
+                              ) : (
+                                <div className="w-12 h-12 bg-gradient-to-br from-amber-700 to-amber-600 rounded-lg flex items-center justify-center">
+                                  <FiCreditCard size={24} className="text-white" />
+                                </div>
+                              )}
                               <div>
                                 <p className="font-semibold text-black">
                                   {payment.network_name}
@@ -838,7 +855,8 @@ export function UserProfilePage() {
                               <FiTrash2 size={20} />
                             </button>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>

@@ -1,187 +1,206 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  FiArrowLeft,
-  FiHeart,
-  FiCheckCircle,
-  FiAlertCircle,
-} from "react-icons/fi";
+import { FiArrowLeft, FiHeart } from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
+import { useToast } from "../components/Toast";
 import { orders, profiles } from "../lib/supabaseClient";
 
-interface DonationState {
-  amount: number;
-  customAmount: string;
-  provider: "mpesa" | "tigopesa" | "airtel" | "halo" | "none";
-  pin: string;
-  showPinInput: boolean;
-  message: string;
-}
+type DonationProvider = "mpesa" | "tigopesa" | "airtel" | "halo";
+type PaymentState = "idle" | "initiating" | "waiting" | "failed";
 
-interface DonationRecord {
-  user_id: string;
-  amount: number;
-  provider: string;
-  message: string;
-  status: string;
-}
+const PROVIDERS: {
+  name: string;
+  provider: DonationProvider;
+  color: string;
+  image: string;
+}[] = [
+  {
+    name: "M-Pesa",
+    provider: "mpesa",
+    color: "bg-gradient-to-br from-blue-500 to-blue-600",
+    image: "/Asset/mpesa.png",
+  },
+  {
+    name: "Airtel Money",
+    provider: "airtel",
+    color: "bg-gradient-to-br from-red-500 to-red-600",
+    image: "/Asset/airtelmoney.png",
+  },
+  {
+    name: "TIGO Pesa",
+    provider: "tigopesa",
+    color: "bg-gradient-to-br from-yellow-500 to-yellow-600",
+    image: "/Asset/mixx.png",
+  },
+  {
+    name: "Halo Pesa",
+    provider: "halo",
+    color: "bg-gradient-to-br from-purple-500 to-purple-600",
+    image: "/Asset/halopesa.png",
+  },
+];
 
 export function SadakaPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
-  const [success, setSuccess] = React.useState(false);
-  const [donation, setDonation] = React.useState<DonationState>({
-    amount: 5000,
-    customAmount: "",
-    provider: "none",
-    pin: "",
-    showPinInput: false,
-    message: "",
-  });
+  const { showToast } = useToast();
 
-  // Predefined donation amounts in TZS
-  const donationAmounts = [
-    { value: 5000, label: "Tsh 5,000" },
-    { value: 10000, label: "Tsh 10,000" },
-    { value: 25000, label: "Tsh 25,000" },
-    { value: 50000, label: "Tsh 50,000" },
-    { value: 100000, label: "Tsh 100,000" },
-  ];
+  const [amount, setAmount] = React.useState(5000);
+  const [customAmount, setCustomAmount] = React.useState("");
+  const [message, setMessage] = React.useState("");
+  const [paymentState, setPaymentState] = React.useState<PaymentState>("idle");
+  const [userPhone, setUserPhone] = React.useState("");
 
-  // Ensure user is logged in
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollCountRef = React.useRef(0);
+
+  const donationAmounts = [5000, 10000, 25000, 50000, 100000];
+
   React.useEffect(() => {
     if (!user) {
       navigate("/login");
+      return;
     }
+    profiles.getProfile(user.id).then(({ data }) => {
+      if (data?.phone) setUserPhone(data.phone);
+    });
   }, [user, navigate]);
 
-  const getAmountToUse = () => {
-    return donation.customAmount
-      ? parseInt(donation.customAmount)
-      : donation.amount;
+  React.useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const getAmountToUse = () =>
+    customAmount ? parseInt(customAmount) || 0 : amount;
+
+  const normalizePhone = (phone: string) => {
+    const cleaned = phone.replace(/[\s\-\+\(\)]/g, "");
+    if (cleaned.startsWith("0")) return "255" + cleaned.slice(1);
+    if (cleaned.startsWith("255")) return cleaned;
+    return "255" + cleaned;
   };
 
-  const handleDonationAmountClick = (amount: number) => {
-    setDonation((prev) => ({
-      ...prev,
-      amount,
-      customAmount: "",
-    }));
-  };
-
-  const handleCustomAmount = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setDonation((prev) => ({
-      ...prev,
-      customAmount: value,
-    }));
-  };
-
-  const handleProviderSelect = (
-    provider: "mpesa" | "tigopesa" | "airtel" | "halo",
-  ) => {
-    setDonation((prev) => ({
-      ...prev,
-      provider,
-      showPinInput: true,
-    }));
-  };
-
-  const handlePINChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDonation((prev) => ({
-      ...prev,
-      pin: e.target.value.slice(0, 4),
-    }));
-  };
-
-  const handleMessageChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDonation((prev) => ({
-      ...prev,
-      message: e.target.value,
-    }));
-  };
-
-  const handlePINSubmit = async () => {
-    if (donation.pin.length !== 4) {
-      setError("PIN lazima iwe nambari 4");
-      return;
-    }
-
+  const handleDonate = async (provider: DonationProvider) => {
     if (!user) {
-      setError("Lazima uwe umeingia kuendelea");
+      showToast("Lazima uwe umeingia kuendelea", "warning");
       return;
     }
 
-    setError("");
-    setLoading(true);
+    const donationAmount = getAmountToUse();
+    if (!donationAmount || donationAmount < 500) {
+      showToast("Tafadhali ingiza kiasi sahihi (angalau Tsh 500)", "warning");
+      return;
+    }
+
+    if (!userPhone) {
+      showToast(
+        "Tafadhali ongeza nambari ya simu kwenye wasifu wako kwanza",
+        "warning",
+      );
+      navigate("/profile?tab=account");
+      return;
+    }
+
+    setPaymentState("initiating");
 
     try {
-      const amountToDonate = getAmountToUse();
+      const phone = normalizePhone(userPhone);
+      const orderRef = `DON${Date.now()}`;
 
-      // Create a donation record in the orders table (using it for donations too)
-      const donationData: DonationRecord = {
-        user_id: user.id,
-        amount: amountToDonate,
-        provider: donation.provider,
-        message: donation.message || "Sadaka",
-        status: "pending",
-      };
-
-      const { error: createError } = await orders.createOrder({
-        user_id: user.id,
-        total_price: amountToDonate,
-        items: JSON.stringify([
-          {
-            name: `Sadaka - ${donation.provider}`,
-            quantity: 1,
-            price: amountToDonate,
-          },
-        ]),
-        delivery_address: `Sadaka: ${donation.message || "Sadaka bila ujumbe"}`,
-        payment_method: donation.provider,
-        payment_status: "pending",
-        notes: `PIN: ${donation.pin}, Message: ${donation.message}`,
+      const initiateRes = await fetch("/api/clickpesa/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: phone,
+          amount: String(donationAmount),
+          orderReference: orderRef,
+        }),
       });
 
-      if (createError) throw createError;
+      const initiateData = await initiateRes.json();
 
-      // Show success message
-      setSuccess(true);
-      setDonation({
-        amount: 5000,
-        customAmount: "",
-        provider: "none",
-        pin: "",
-        showPinInput: false,
-        message: "",
-      });
+      if (!initiateRes.ok) {
+        showToast(initiateData.error || "Kosa la kuanzisha malipo", "error");
+        setPaymentState("idle");
+        return;
+      }
 
-      // Navigate to profile after 3 seconds
-      setTimeout(() => {
-        navigate("/profile?tab=orders");
-      }, 3000);
-    } catch (err: any) {
-      setError("Kosa la kusubmit sadaka: " + err.message);
-    } finally {
-      setLoading(false);
+      setPaymentState("waiting");
+      showToast(
+        "Ombi limetumwa! Angalia simu yako na idhinisha sadaka.",
+        "info",
+      );
+
+      pollCountRef.current = 0;
+      pollRef.current = setInterval(async () => {
+        pollCountRef.current += 1;
+
+        if (pollCountRef.current > 36) {
+          clearInterval(pollRef.current!);
+          setPaymentState("failed");
+          showToast(
+            "Muda wa malipo umekwisha. Tafadhali jaribu tena.",
+            "error",
+          );
+          return;
+        }
+
+        try {
+          const statusRes = await fetch(
+            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
+          );
+          const { status } = await statusRes.json();
+
+          if (status === "SUCCESS" || status === "SETTLED") {
+            clearInterval(pollRef.current!);
+            const providerName =
+              PROVIDERS.find((p) => p.provider === provider)?.name ?? provider;
+
+            await orders.createOrder({
+              user_id: user.id,
+              order_number: orderRef,
+              total: donationAmount,
+              status: "completed",
+              items: [
+                {
+                  product_id: "donation",
+                  name: `Sadaka - ${providerName}`,
+                  price: donationAmount,
+                  quantity: 1,
+                },
+              ],
+            });
+
+            setPaymentState("idle");
+            setCustomAmount("");
+            setMessage("");
+            showToast(
+              `Asante sana! Sadaka yako ya Tsh ${donationAmount.toLocaleString("sw-TZ")} imepokelewa. Mungu akubariki!`,
+              "success",
+              7000,
+            );
+            setTimeout(() => navigate("/profile?tab=orders"), 3000);
+          } else if (status === "FAILED") {
+            clearInterval(pollRef.current!);
+            setPaymentState("failed");
+            showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");
+          }
+        } catch (e) {
+          console.error("Status poll error:", e);
+        }
+      }, 5000);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Hitilafu isiyojulikana";
+      showToast(msg, "error");
+      setPaymentState("idle");
     }
   };
 
-  const getProviderName = (provider: string) => {
-    const names: Record<string, string> = {
-      mpesa: "M-Pesa",
-      tigopesa: "TIGO Pesa",
-      airtel: "Airtel Money",
-      halo: "Halo Pesa",
-    };
-    return names[provider] || provider;
-  };
+  if (!user) return null;
 
-  if (!user) {
-    return null;
-  }
+  const displayAmount = getAmountToUse();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50 py-8 px-4">
@@ -200,94 +219,51 @@ export function SadakaPage() {
               Sadaka
             </h1>
             <p className="text-gray-600 mt-1">
-              Tafadhali jifunze kuchangia kwa njia ya simu ya pesa
+              Toa sadaka kwa njia ya simu ya pesa
             </p>
           </div>
         </div>
 
-        {/* Success Message */}
-        {success && (
-          <div className="mb-8 p-6 bg-green-50 border border-green-200 rounded-lg flex items-start gap-4">
-            <FiCheckCircle
-              size={24}
-              className="text-green-600 flex-shrink-0 mt-1"
-            />
-            <div>
-              <h3 className="font-semibold text-green-900 text-lg">
-                Asante sana!
-              </h3>
-              <p className="text-green-800 mt-1">
-                Sadaka yako ya Tsh {getAmountToUse().toLocaleString("sw-TZ")}{" "}
-                imepokelewa kwa{" "}
-                <span className="font-semibold">
-                  {getProviderName(donation.provider)}
-                </span>
-              </p>
-              <p className="text-sm text-green-700 mt-2">
-                Unakondokezwa kwa {donation.message || "kwa sadaka yako"}
-              </p>
-              <p className="text-sm text-green-700 mt-1">
-                Mkutanoni ni upande wa kushoto, unipendea kama ujinga?
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-8 p-6 bg-red-50 border border-red-200 rounded-lg flex items-start gap-4">
-            <FiAlertCircle
-              size={24}
-              className="text-red-600 flex-shrink-0 mt-1"
-            />
-            <div>
-              <h3 className="font-semibold text-red-900">Kosa!</h3>
-              <p className="text-red-800 mt-1">{error}</p>
-            </div>
-          </div>
-        )}
-
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Main Content - Left */}
+          {/* Left – amount + message + payment */}
           <div className="lg:col-span-2 space-y-8">
-            {/* Donation Amount Section */}
+            {/* Amount */}
             <div className="bg-white rounded-lg shadow-md p-8">
               <h2 className="text-2xl font-bold text-black mb-6">
                 Chagua Kiasi cha Sadaka
               </h2>
-
-              {/* Preset Amounts */}
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                {donationAmounts.map((amount) => (
+                {donationAmounts.map((a) => (
                   <button
-                    key={amount.value}
-                    onClick={() => handleDonationAmountClick(amount.value)}
+                    key={a}
+                    onClick={() => {
+                      setAmount(a);
+                      setCustomAmount("");
+                    }}
+                    disabled={paymentState !== "idle"}
                     className={`p-4 rounded-lg font-semibold transition ${
-                      donation.amount === amount.value && !donation.customAmount
+                      amount === a && !customAmount
                         ? "bg-amber-700 text-white shadow-lg"
                         : "bg-gray-100 text-black hover:bg-amber-100"
-                    }`}
+                    } disabled:opacity-50`}
                   >
-                    {amount.label}
+                    Tsh {a.toLocaleString("sw-TZ")}
                   </button>
                 ))}
               </div>
-
-              {/* Custom Amount */}
               <div>
                 <label className="block text-sm font-semibold text-black mb-2">
                   Kiasi Maalum
                 </label>
                 <div className="flex gap-4">
-                  <div className="flex-1">
-                    <input
-                      type="number"
-                      value={donation.customAmount}
-                      onChange={handleCustomAmount}
-                      placeholder="Ingiza kiasi..."
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
-                    />
-                  </div>
+                  <input
+                    type="number"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    disabled={paymentState !== "idle"}
+                    placeholder="Ingiza kiasi..."
+                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700 disabled:opacity-50"
+                  />
                   <span className="flex items-center text-gray-600 font-semibold">
                     TZS
                   </span>
@@ -295,160 +271,145 @@ export function SadakaPage() {
               </div>
             </div>
 
-            {/* Message Section */}
+            {/* Message */}
             <div className="bg-white rounded-lg shadow-md p-8">
               <h2 className="text-2xl font-bold text-black mb-6">
                 Ujumbe (Hiyari)
               </h2>
               <textarea
-                value={donation.message}
-                onChange={handleMessageChange}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                disabled={paymentState !== "idle"}
                 placeholder="Andika ujumbe wako kwa Mungu..."
                 maxLength={500}
                 rows={5}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700 disabled:opacity-50"
               />
               <p className="text-sm text-gray-500 mt-2">
-                {donation.message.length}/500 herufi
+                {message.length}/500 herufi
               </p>
             </div>
 
-            {/* Payment Methods Section */}
-            {!donation.showPinInput && (
+            {/* Provider selection – idle only */}
+            {paymentState === "idle" && (
               <div className="bg-white rounded-lg shadow-md p-8">
-                <h2 className="text-2xl font-bold text-black mb-6">
-                  Njia ya Malipo
+                <h2 className="text-2xl font-bold text-black mb-2">
+                  Chagua Njia ya Malipo
                 </h2>
                 <p className="text-gray-600 mb-6">
                   Chagua njia ya simu ya pesa unayopendelea
                 </p>
-
                 <div className="grid grid-cols-2 gap-4">
-                  {[
-                    {
-                      name: "M-Pesa",
-                      provider: "mpesa" as const,
-                      color: "bg-gradient-to-br from-blue-500 to-blue-600",
-                      icon: "📱",
-                    },
-                    {
-                      name: "Airtel Money",
-                      provider: "airtel" as const,
-                      color: "bg-gradient-to-br from-red-500 to-red-600",
-                      icon: "💳",
-                    },
-                    {
-                      name: "TIGO Pesa",
-                      provider: "tigopesa" as const,
-                      color: "bg-gradient-to-br from-yellow-500 to-yellow-600",
-                      icon: "💰",
-                    },
-                    {
-                      name: "Halo Pesa",
-                      provider: "halo" as const,
-                      color: "bg-gradient-to-br from-purple-500 to-purple-600",
-                      icon: "✨",
-                    },
-                  ].map((method) => (
+                  {PROVIDERS.map((method) => (
                     <button
                       key={method.provider}
-                      onClick={() => handleProviderSelect(method.provider)}
-                      disabled={loading}
-                      className={`${method.color} p-6 rounded-lg text-white font-semibold transition transform hover:scale-105 hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+                      onClick={() => handleDonate(method.provider)}
+                      className={`${method.color} p-6 rounded-lg text-white font-semibold transition transform hover:scale-105 hover:shadow-lg`}
                     >
-                      <div className="text-4xl mb-2">{method.icon}</div>
+                      <img
+                        src={method.image}
+                        alt={method.name}
+                        className="w-16 h-16 mx-auto mb-3 object-contain rounded-lg bg-white/20 p-1"
+                      />
                       <div>{method.name}</div>
                     </button>
                   ))}
                 </div>
               </div>
             )}
+
+            {/* Initiating */}
+            {paymentState === "initiating" && (
+              <div className="bg-white rounded-lg shadow-md p-10 text-center">
+                <div className="animate-spin rounded-full h-14 w-14 border-4 border-amber-700 border-t-transparent mx-auto mb-4" />
+                <p className="text-black font-semibold">
+                  Inatuma ombi la malipo...
+                </p>
+              </div>
+            )}
+
+            {/* Waiting */}
+            {paymentState === "waiting" && (
+              <div className="bg-white rounded-lg shadow-md p-10 text-center">
+                <div className="text-5xl mb-4 animate-bounce">📱</div>
+                <p className="text-black font-bold text-xl mb-2">
+                  Angalia Simu Yako
+                </p>
+                <p className="text-gray-600 text-sm mb-4">
+                  Ombi la sadaka ya{" "}
+                  <span className="font-bold text-amber-700">
+                    Tsh {displayAmount.toLocaleString("sw-TZ")}
+                  </span>{" "}
+                  limetumwa. Idhinisha kwenye simu yako.
+                </p>
+                <div className="flex items-center justify-center gap-2 mb-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-amber-700 border-t-transparent" />
+                  <p className="text-gray-500 text-sm">
+                    Inasubiri uthibitisho...
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    if (pollRef.current) clearInterval(pollRef.current);
+                    setPaymentState("idle");
+                  }}
+                  className="text-red-500 text-sm underline hover:text-red-700 transition"
+                >
+                  Ghairi
+                </button>
+              </div>
+            )}
+
+            {/* Failed */}
+            {paymentState === "failed" && (
+              <div className="bg-white rounded-lg shadow-md p-10 text-center">
+                <div className="text-5xl mb-4">❌</div>
+                <p className="text-black font-bold text-lg mb-2">
+                  Sadaka Haikufanikiwa
+                </p>
+                <p className="text-gray-600 text-sm mb-6">
+                  Tafadhali hakikisha nambari yako ya simu ni sahihi na jaribu
+                  tena.
+                </p>
+                <button
+                  onClick={() => setPaymentState("idle")}
+                  className="px-8 py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg transition"
+                >
+                  Jaribu Tena
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Sidebar - Right */}
+          {/* Sidebar – summary */}
           <div>
-            {/* Order Summary */}
             <div className="sticky top-20 bg-white rounded-lg shadow-md p-8">
               <h3 className="text-2xl font-bold text-black mb-6">Muhtasari</h3>
-
               <div className="space-y-4 mb-6">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Kiasi cha Sadaka:</span>
                   <span className="font-semibold text-black">
-                    Tsh {getAmountToUse().toLocaleString("sw-TZ")}
+                    Tsh {displayAmount.toLocaleString("sw-TZ")}
                   </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Njia ya Malipo:</span>
-                  <span className="font-semibold text-black">
-                    {donation.provider === "none"
-                      ? "Chagua..."
-                      : getProviderName(donation.provider)}
-                  </span>
-                </div>
-                {donation.message && (
+                {message && (
                   <div className="flex justify-between items-start">
                     <span className="text-gray-600">Ujumbe:</span>
                     <span className="font-semibold text-black text-right max-w-xs">
-                      {donation.message.substring(0, 30)}
-                      {donation.message.length > 30 ? "..." : ""}
+                      {message.substring(0, 30)}
+                      {message.length > 30 ? "..." : ""}
                     </span>
                   </div>
                 )}
               </div>
-
               <div className="border-t border-gray-200 pt-4 mb-6">
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-bold text-black">Jumla:</span>
                   <span className="text-2xl font-bold text-amber-700">
-                    Tsh {getAmountToUse().toLocaleString("sw-TZ")}
+                    Tsh {displayAmount.toLocaleString("sw-TZ")}
                   </span>
                 </div>
               </div>
-
-              {/* PIN Input Modal */}
-              {donation.showPinInput && (
-                <div className="bg-amber-50 border-2 border-amber-200 rounded-lg p-6 mb-6">
-                  <h4 className="font-bold text-black mb-4">Ingiza PIN Yako</h4>
-                  <input
-                    type="password"
-                    inputMode="numeric"
-                    value={donation.pin}
-                    onChange={handlePINChange}
-                    placeholder="****"
-                    maxLength={4}
-                    className="w-full text-center text-3xl font-bold tracking-widest px-4 py-3 border-2 border-amber-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
-                  />
-                  <p className="text-xs text-gray-600 mt-2 text-center">
-                    PIN yako haitasongezwa
-                  </p>
-
-                  <div className="flex gap-3 mt-4">
-                    <button
-                      onClick={() =>
-                        setDonation((prev) => ({
-                          ...prev,
-                          showPinInput: false,
-                          pin: "",
-                          provider: "none",
-                        }))
-                      }
-                      disabled={loading}
-                      className="flex-1 px-4 py-3 bg-gray-300 hover:bg-gray-400 text-black font-semibold rounded-lg transition disabled:opacity-50"
-                    >
-                      Ghairi
-                    </button>
-                    <button
-                      onClick={handlePINSubmit}
-                      disabled={loading || donation.pin.length !== 4}
-                      className="flex-1 px-4 py-3 bg-amber-700 hover:bg-amber-800 text-white font-semibold rounded-lg transition disabled:opacity-50"
-                    >
-                      {loading ? "Inakusubmit..." : "Tuma Sadaka"}
-                    </button>
-                  </div>
-                </div>
-              )}
-
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-lg p-6 border border-amber-200">
                 <p className="text-sm text-amber-900">
                   <strong>Karibu sana!</strong> Sadaka yako itasaidia kuendeleza

@@ -226,24 +226,6 @@ export function CheckoutPage() {
       const orderTotal = calculateTotal();
       const orderRef = `ORD${Date.now()}`;
 
-      // Create order in Supabase
-      const { data: orderData, error: orderError } = await orders.createOrder({
-        user_id: user.id,
-        order_number: orderRef,
-        total: orderTotal,
-        status: "pending",
-        items: orderItems,
-      });
-
-      if (orderError) {
-        showToast("Kosa la kuunda agizo: " + orderError.message, "error");
-        setPaymentState("idle");
-        return;
-      }
-
-      const orderId = orderData?.id ?? null;
-      setCreatedOrderId(orderId);
-
       // Update profile in background (non-blocking)
       profiles
         .updateProfile(user.id, {
@@ -254,7 +236,7 @@ export function CheckoutPage() {
         })
         .catch((e) => console.warn("Profile update warning:", e));
 
-      // Initiate ClickPesa USSD push
+      // Initiate ClickPesa USSD push BEFORE creating any order record (pay first)
       const phone = normalizePhone(formData.phone);
       const initiateRes = await fetch("/api/clickpesa/initiate", {
         method: "POST",
@@ -305,11 +287,18 @@ export function CheckoutPage() {
           if (status === "SUCCESS" || status === "SETTLED") {
             clearInterval(pollRef.current!);
             showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
-            await downloadOrderBooks();
 
-            if (orderId) {
-              await orders.updateOrder(orderId, { status: "completed" });
-            }
+            // Payment confirmed — NOW create the order as completed
+            const { data: orderData } = await orders.createOrder({
+              user_id: user.id,
+              order_number: orderRef,
+              total: orderTotal,
+              status: "completed",
+              items: orderItems,
+            });
+            if (orderData?.id) setCreatedOrderId(orderData.id);
+
+            await downloadOrderBooks();
 
             localStorage.setItem("cart", JSON.stringify([]));
             window.dispatchEvent(new Event("storage"));
