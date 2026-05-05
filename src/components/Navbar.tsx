@@ -113,13 +113,13 @@ export function Navbar() {
     <>
       <nav className="sticky top-0 z-50 bg-white shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+          <div className="flex justify-between items-center h-16 sm:h-18">
             {/* Logo - Left */}
             <a href="/" className="flex items-center flex-shrink-0">
               <img
                 src="/Asset/official web logo.png"
                 alt="Oscar Mkatoliki"
-                className="h-10 sm:h-12 w-auto"
+                className="h-14 sm:h-16 w-auto"
               />
             </a>
 

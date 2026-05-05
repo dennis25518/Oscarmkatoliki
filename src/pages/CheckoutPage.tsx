@@ -50,6 +50,7 @@ export function CheckoutPage() {
     pin: "",
     showPinInput: false,
   });
+  const [createdOrderId, setCreatedOrderId] = React.useState<string | null>(null);
 
   // Fetch all products from Supabase
   React.useEffect(() => {
@@ -207,7 +208,7 @@ export function CheckoutPage() {
       const total = calculateTotal();
 
       // Create order in Supabase
-      const { error: orderError } = await orders.createOrder({
+      const { data: orderData, error: orderError } = await orders.createOrder({
         user_id: user.id,
         order_number: `ORD-${Date.now()}`,
         total: total,
@@ -219,6 +220,11 @@ export function CheckoutPage() {
         setError("Kosa la kuunda agizo: " + orderError.message);
         setLoading(false);
         return;
+      }
+
+      // Save order ID so we can mark it completed after download
+      if (orderData?.id) {
+        setCreatedOrderId(orderData.id);
       }
 
       // Update user profile
@@ -272,6 +278,11 @@ export function CheckoutPage() {
 
       // Trigger automatic downloads for all books in the order
       await downloadOrderBooks();
+
+      // Mark order as completed after successful download
+      if (createdOrderId) {
+        await orders.updateOrder(createdOrderId, { status: "completed" });
+      }
 
       // Clear cart and navigate
       localStorage.setItem("cart", JSON.stringify([]));
