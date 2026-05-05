@@ -19,6 +19,7 @@ import { PrivacyPolicyPage } from "./pages/PrivacyPolicyPage";
 import { TermsOfServicePage } from "./pages/TermsOfServicePage";
 import { SadakaPage } from "./pages/SadakaPage";
 import { AuthProvider, useAuth } from "./lib/AuthContext";
+import { ToastProvider } from "./components/Toast";
 import type { JSX } from "react";
 import "./App.css";
 
@@ -82,7 +83,9 @@ function App() {
     <Router>
       <CustomCursor />
       <AuthProvider>
-        <AppContent />
+        <ToastProvider>
+          <AppContent />
+        </ToastProvider>
       </AuthProvider>
     </Router>
   );

@@ -277,11 +277,11 @@ export function UserProfilePage() {
   const getOrderStatusColor = (status: string) => {
     switch (status) {
       case "completed":
-        return "text-green-600 bg-green-50";
+        return "text-green-600 bg-green-50 border border-green-200";
       case "pending":
-        return "text-yellow-600 bg-yellow-50";
+        return "text-yellow-600 bg-yellow-50 border border-yellow-200";
       case "cancelled":
-        return "text-red-600 bg-red-50";
+        return "text-red-600 bg-red-50 border border-red-200";
       default:
         return "text-gray-600 bg-gray-50";
     }
@@ -290,11 +290,11 @@ export function UserProfilePage() {
   const getOrderStatusLabel = (status: string) => {
     switch (status) {
       case "completed":
-        return "Kumaliziwa";
+        return "Completed";
       case "pending":
-        return "Inafuatiliwa";
+        return "Pending";
       case "cancelled":
-        return "Ibadilishwa";
+        return "Cancelled";
       default:
         return status;
     }

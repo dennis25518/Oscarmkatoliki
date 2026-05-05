@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin } from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
+import { useToast } from "../components/Toast";
 import {
   orders,
   profiles,
@@ -33,6 +34,7 @@ interface USSDPaymentState {
 export function CheckoutPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [cartItems, setCartItems] = React.useState<CartItem[]>([]);
   const [productDetails, setProductDetails] = React.useState<
     Record<number, Product>
@@ -50,7 +52,9 @@ export function CheckoutPage() {
     pin: "",
     showPinInput: false,
   });
-  const [createdOrderId, setCreatedOrderId] = React.useState<string | null>(null);
+  const [createdOrderId, setCreatedOrderId] = React.useState<string | null>(
+    null,
+  );
 
   // Fetch all products from Supabase
   React.useEffect(() => {
@@ -139,18 +143,28 @@ export function CheckoutPage() {
     }, 0);
   };
 
-  // Helper function to download a file
-  const downloadFile = (url: string, fileName: string) => {
-    // Create a temporary anchor element
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = fileName || "download";
-    link.target = "_blank";
-    
-    // Trigger download
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Helper function to download a file without opening a new tab
+  const downloadFile = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName || "download";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      // fallback: direct link download
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName || "download";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   // Helper function to download all books in cart
@@ -161,10 +175,10 @@ export function CheckoutPage() {
         if (product && product.file_url) {
           // Create a safe file name from product name
           const safeFileName = `${product.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`;
-          
+
           // Add a small delay between downloads to avoid overwhelming the browser
           await new Promise((resolve) => setTimeout(resolve, 500));
-          
+
           downloadFile(product.file_url, safeFileName);
         }
       }
@@ -267,16 +281,18 @@ export function CheckoutPage() {
 
   const handlePINSubmit = async () => {
     if (!ussdPayment.pin || ussdPayment.pin.length < 4) {
-      setError("Tafadhali ingiza PIN sahihi");
+      showToast("Tafadhali ingiza PIN sahihi (angalau tarakimu 4)", "warning");
       return;
     }
 
     setLoading(true);
+    showToast("Inashughulikia malipo...", "info");
     try {
       // Simulate USSD payment processing
       await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Trigger automatic downloads for all books in the order
+      showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
       await downloadOrderBooks();
 
       // Mark order as completed after successful download
@@ -295,13 +311,12 @@ export function CheckoutPage() {
         showPinInput: false,
       });
 
-      // Show success message and navigate
-      alert("✅ Agizo lako limekamilika! Kitabu/Vitabu vya kiroho vinakuja...");
+      showToast("Agizo lako limekamilika!", "success", 5000);
       navigate("/profile");
     } catch (err) {
       const errorMessage =
         err instanceof Error ? err.message : "Malipo hayakufanya kazi";
-      setError(errorMessage);
+      showToast(errorMessage, "error");
     } finally {
       setLoading(false);
     }
