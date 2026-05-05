@@ -149,15 +149,13 @@ export function Navbar() {
               >
                 Mawasiliano
               </a>
-              {user && (
-                <a
-                  href="/sadaka"
-                  className="text-red-600 hover:text-red-700 transition font-semibold flex items-center gap-1"
-                >
-                  <FiHeart size={18} />
-                  Sadaka
-                </a>
-              )}
+              <a
+                href="/sadaka"
+                className="text-red-600 hover:text-red-700 transition font-semibold flex items-center gap-1"
+              >
+                <FiHeart size={18} />
+                Sadaka
+              </a>
             </div>
 
             {/* Cart and User Profile - Right */}
@@ -312,19 +310,17 @@ export function Navbar() {
                 <FiMail size={20} className="text-amber-700" />
                 <span>Mawasiliano</span>
               </a>
-              {user && (
-                <a
-                  href="/sadaka"
-                  onClick={() => {
-                    navigate("/sadaka");
-                    closeMobileMenu();
-                  }}
-                  className="block px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition font-semibold flex items-center space-x-3"
-                >
-                  <FiHeart size={20} className="text-red-600" />
-                  <span>Sadaka</span>
-                </a>
-              )}
+              <a
+                href="/sadaka"
+                onClick={() => {
+                  navigate("/sadaka");
+                  closeMobileMenu();
+                }}
+                className="block px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition font-semibold flex items-center space-x-3"
+              >
+                <FiHeart size={20} className="text-red-600" />
+                <span>Sadaka</span>
+              </a>
             </nav>
 
             {/* Divider */}

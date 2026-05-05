@@ -63,10 +63,7 @@ function AppContent() {
           path="/checkout"
           element={<ProtectedRoute element={<CheckoutPage />} />}
         />
-        <Route
-          path="/sadaka"
-          element={<ProtectedRoute element={<SadakaPage />} />}
-        />
+        <Route path="/sadaka" element={<SadakaPage />} />
         <Route
           path="/profile"
           element={<ProtectedRoute element={<UserProfilePage />} />}
