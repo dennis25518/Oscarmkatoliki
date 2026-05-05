@@ -615,7 +615,7 @@ export function UserProfilePage() {
                     {orders.map((order) => (
                       <div
                         key={order.id}
-                        <div className="border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-xl transition bg-gradient-to-br from-white to-gray-50">
+                        className="border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-xl transition bg-gradient-to-br from-white to-gray-50"
                       >
                         {/* Header */}
                         <div className="flex justify-between items-start gap-4 mb-6 pb-6 border-b border-gray-200">
