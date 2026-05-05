@@ -817,44 +817,47 @@ export function UserProfilePage() {
                           const networkImg =
                             networkImageMap[payment.network_name] ?? null;
                           return (
-                          <div
-                            key={payment.id || "payment-method"}
-                            className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition bg-gradient-to-r from-amber-50 to-transparent"
-                          >
-                            <div className="flex items-center gap-4">
-                              {networkImg ? (
-                                <img
-                                  src={networkImg}
-                                  alt={payment.network_name}
-                                  className="w-12 h-12 rounded-lg object-contain bg-white border border-gray-100 p-1"
-                                />
-                              ) : (
-                                <div className="w-12 h-12 bg-gradient-to-br from-amber-700 to-amber-600 rounded-lg flex items-center justify-center">
-                                  <FiCreditCard size={24} className="text-white" />
-                                </div>
-                              )}
-                              <div>
-                                <p className="font-semibold text-black">
-                                  {payment.network_name}
-                                </p>
-                                <p className="text-sm text-gray-600">
-                                  +255{payment.network_number?.slice(-7)}
-                                </p>
-                                <span className="inline-block text-xs font-semibold text-green-700 mt-1">
-                                  Simu ya Pesa
-                                </span>
-                              </div>
-                            </div>
-                            <button
-                              onClick={() =>
-                                removePaymentMethod(payment.id || "")
-                              }
-                              disabled={saving}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition disabled:opacity-50"
+                            <div
+                              key={payment.id || "payment-method"}
+                              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition bg-gradient-to-r from-amber-50 to-transparent"
                             >
-                              <FiTrash2 size={20} />
-                            </button>
-                          </div>
+                              <div className="flex items-center gap-4">
+                                {networkImg ? (
+                                  <img
+                                    src={networkImg}
+                                    alt={payment.network_name}
+                                    className="w-12 h-12 rounded-lg object-contain bg-white border border-gray-100 p-1"
+                                  />
+                                ) : (
+                                  <div className="w-12 h-12 bg-gradient-to-br from-amber-700 to-amber-600 rounded-lg flex items-center justify-center">
+                                    <FiCreditCard
+                                      size={24}
+                                      className="text-white"
+                                    />
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="font-semibold text-black">
+                                    {payment.network_name}
+                                  </p>
+                                  <p className="text-sm text-gray-600">
+                                    +255{payment.network_number?.slice(-7)}
+                                  </p>
+                                  <span className="inline-block text-xs font-semibold text-green-700 mt-1">
+                                    Simu ya Pesa
+                                  </span>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() =>
+                                  removePaymentMethod(payment.id || "")
+                                }
+                                disabled={saving}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50 p-2 rounded-lg transition disabled:opacity-50"
+                              >
+                                <FiTrash2 size={20} />
+                              </button>
+                            </div>
                           );
                         })}
                       </div>

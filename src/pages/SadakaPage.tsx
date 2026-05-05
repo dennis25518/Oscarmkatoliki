@@ -257,9 +257,8 @@ export function SadakaPage() {
           </div>
           <div className="bg-green-50 rounded-lg p-4 mb-8 border border-green-200">
             <p className="text-sm text-green-800 italic">
-              "Kila mtu amtolee kama alivyokusudia moyoni mwake; si kwa
-              huzuni, wala si kwa lazima; maana Mungu hupenda yeye atoaye kwa
-              furaha."
+              "Kila mtu amtolee kama alivyokusudia moyoni mwake; si kwa huzuni,
+              wala si kwa lazima; maana Mungu hupenda yeye atoaye kwa furaha."
             </p>
             <p className="text-xs text-green-600 mt-2 font-semibold">
               — 2 Wakorintho 9:7

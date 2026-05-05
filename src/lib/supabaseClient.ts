@@ -438,9 +438,7 @@ export const comments = {
     return { data, error };
   },
 
-  async createComment(
-    comment: Omit<ProductComment, "id" | "created_at">,
-  ) {
+  async createComment(comment: Omit<ProductComment, "id" | "created_at">) {
     const { data, error } = await supabase
       .from("product_comments")
       .insert([comment])

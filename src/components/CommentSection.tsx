@@ -1,12 +1,5 @@
 import * as React from "react";
-import {
-  FiStar,
-  FiSend,
-  FiImage,
-  FiX,
-  FiTrash2,
-  FiUser,
-} from "react-icons/fi";
+import { FiStar, FiSend, FiImage, FiX, FiTrash2, FiUser } from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
 import { useToast } from "./Toast";
 import {
@@ -132,8 +125,7 @@ export function CommentSection({ productId }: CommentSectionProps) {
     try {
       // Get display name from profile
       const { data: profile } = await profiles.getProfile(user.id);
-      const userName =
-        profile?.name || user.email?.split("@")[0] || "Mtumiaji";
+      const userName = profile?.name || user.email?.split("@")[0] || "Mtumiaji";
       const userAvatar = profile?.profile_picture ?? null;
 
       // Upload proof image if provided
@@ -192,9 +184,7 @@ export function CommentSection({ productId }: CommentSectionProps) {
       {/* Section header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-2xl font-bold text-black">
-            Maoni ya Wasomaji
-          </h2>
+          <h2 className="text-2xl font-bold text-black">Maoni ya Wasomaji</h2>
           {commentList.length > 0 && (
             <div className="flex items-center gap-3 mt-2">
               <StarRating value={Math.round(avg)} readOnly size={18} />
@@ -206,6 +196,83 @@ export function CommentSection({ productId }: CommentSectionProps) {
           )}
         </div>
       </div>
+
+      {/* Comments list – always first */}
+      {loadingComments ? (
+        <div className="flex justify-center py-10">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-700 border-t-transparent" />
+        </div>
+      ) : commentList.length === 0 ? (
+        <div className="text-center py-10 text-gray-400">
+          <p className="text-lg">Bado hakuna maoni.</p>
+          <p className="text-sm mt-1">Kuwa wa kwanza kuandika maoni!</p>
+        </div>
+      ) : (
+        <div className="space-y-6 mb-12">
+          {commentList.map((c) => (
+            <div
+              key={c.id}
+              className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"
+            >
+              {/* Top row: avatar + name/date/stars + delete */}
+              <div className="flex items-start justify-between gap-4 mb-3">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    {c.user_avatar ? (
+                      <img
+                        src={c.user_avatar}
+                        alt={c.user_name}
+                        className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                        <span className="text-amber-700 font-bold text-sm">
+                          {c.user_name.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <span className="font-bold text-black text-sm">{c.user_name}</span>
+                      <span className="text-xs text-gray-400">{formatDate(c.created_at)}</span>
+                    </div>
+                    <StarRating value={c.rating} readOnly size={14} />
+                  </div>
+                </div>
+                {user?.id === c.user_id && (
+                  <button
+                    onClick={() => handleDelete(c.id)}
+                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition flex-shrink-0"
+                    title="Futa maoni"
+                  >
+                    <FiTrash2 size={16} />
+                  </button>
+                )}
+              </div>
+
+              {/* Body left, proof image right – same row */}
+              <div className="flex items-start gap-4">
+                <p className="text-gray-700 text-sm leading-relaxed flex-1">{c.body}</p>
+                {c.proof_image_url && (
+                  <a
+                    href={c.proof_image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex-shrink-0"
+                  >
+                    <img
+                      src={c.proof_image_url}
+                      alt="Uthibitisho"
+                      className="w-24 h-24 object-cover rounded-xl border border-gray-200 hover:opacity-90 transition"
+                    />
+                  </a>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Post a comment – registered users only */}
       {user ? (
@@ -311,87 +378,6 @@ export function CommentSection({ productId }: CommentSectionProps) {
         </div>
       )}
 
-      {/* Comments list */}
-      {loadingComments ? (
-        <div className="flex justify-center py-10">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-700 border-t-transparent" />
-        </div>
-      ) : commentList.length === 0 ? (
-        <div className="text-center py-10 text-gray-400">
-          <p className="text-lg">Bado hakuna maoni.</p>
-          <p className="text-sm mt-1">Kuwa wa kwanza kuandika maoni!</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {commentList.map((c) => (
-            <div
-              key={c.id}
-              className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-start gap-4 flex-1">
-                  {/* Avatar */}
-                  <div className="flex-shrink-0">
-                    {c.user_avatar ? (
-                      <img
-                        src={c.user_avatar}
-                        alt={c.user_name}
-                        className="w-10 h-10 rounded-full object-cover border border-gray-200"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                        <span className="text-amber-700 font-bold text-sm">
-                          {c.user_name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                      <span className="font-bold text-black text-sm">
-                        {c.user_name}
-                      </span>
-                      <span className="text-xs text-gray-400">
-                        {formatDate(c.created_at)}
-                      </span>
-                    </div>
-                    <StarRating value={c.rating} readOnly size={14} />
-                    <p className="text-gray-700 text-sm mt-3 leading-relaxed">
-                      {c.body}
-                    </p>
-                    {c.proof_image_url && (
-                      <a
-                        href={c.proof_image_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block mt-3"
-                      >
-                        <img
-                          src={c.proof_image_url}
-                          alt="Uthibitisho"
-                          className="w-24 h-24 object-cover rounded-xl border border-gray-200 hover:opacity-90 transition"
-                        />
-                      </a>
-                    )}
-                  </div>
-                </div>
-
-                {/* Delete button – only for comment owner */}
-                {user?.id === c.user_id && (
-                  <button
-                    onClick={() => handleDelete(c.id)}
-                    className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-lg transition flex-shrink-0"
-                    title="Futa maoni"
-                  >
-                    <FiTrash2 size={16} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
