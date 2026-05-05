@@ -12,7 +12,9 @@ export default async function handler(req: any, res: any) {
         : null;
 
   if (!orderReference) {
-    return res.status(400).json({ error: "Missing orderReference query param" });
+    return res
+      .status(400)
+      .json({ error: "Missing orderReference query param" });
   }
 
   const clientId = process.env.CLICKPESA_CLIENT_ID;
@@ -36,7 +38,9 @@ export default async function handler(req: any, res: any) {
     );
 
     if (!tokenRes.ok) {
-      return res.status(502).json({ error: "Failed to authenticate with payment provider" });
+      return res
+        .status(502)
+        .json({ error: "Failed to authenticate with payment provider" });
     }
 
     const { token } = await tokenRes.json();

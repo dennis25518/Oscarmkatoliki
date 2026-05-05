@@ -7,7 +7,11 @@ export default async function handler(req: any, res: any) {
   const { phoneNumber, amount, orderReference } = req.body || {};
 
   if (!phoneNumber || !amount || !orderReference) {
-    return res.status(400).json({ error: "Missing required fields: phoneNumber, amount, orderReference" });
+    return res
+      .status(400)
+      .json({
+        error: "Missing required fields: phoneNumber, amount, orderReference",
+      });
   }
 
   const clientId = process.env.CLICKPESA_CLIENT_ID;
@@ -33,7 +37,9 @@ export default async function handler(req: any, res: any) {
     if (!tokenRes.ok) {
       const err = await tokenRes.text();
       console.error("ClickPesa auth error:", err);
-      return res.status(502).json({ error: "Failed to authenticate with payment provider" });
+      return res
+        .status(502)
+        .json({ error: "Failed to authenticate with payment provider" });
     }
 
     const { token } = await tokenRes.json();

@@ -1,5 +1,11 @@
 import * as React from "react";
-import { FiCheckCircle, FiAlertCircle, FiInfo, FiAlertTriangle, FiX } from "react-icons/fi";
+import {
+  FiCheckCircle,
+  FiAlertCircle,
+  FiInfo,
+  FiAlertTriangle,
+  FiX,
+} from "react-icons/fi";
 
 export type ToastType = "success" | "error" | "info" | "warning";
 
@@ -31,10 +37,14 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
   };
 
   const icons: Record<ToastType, React.ReactNode> = {
-    success: <FiCheckCircle size={18} className="text-green-500 flex-shrink-0" />,
+    success: (
+      <FiCheckCircle size={18} className="text-green-500 flex-shrink-0" />
+    ),
     error: <FiAlertCircle size={18} className="text-red-500 flex-shrink-0" />,
     info: <FiInfo size={18} className="text-blue-500 flex-shrink-0" />,
-    warning: <FiAlertTriangle size={18} className="text-amber-500 flex-shrink-0" />,
+    warning: (
+      <FiAlertTriangle size={18} className="text-amber-500 flex-shrink-0" />
+    ),
   };
 
   return (
@@ -59,7 +69,9 @@ interface ToastContextType {
   showToast: (message: string, type?: ToastType, duration?: number) => void;
 }
 
-const ToastContext = React.createContext<ToastContextType | undefined>(undefined);
+const ToastContext = React.createContext<ToastContextType | undefined>(
+  undefined,
+);
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<ToastMessage[]>([]);

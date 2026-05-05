@@ -42,8 +42,7 @@ export function CheckoutPage() {
   const [createdOrderId, setCreatedOrderId] = React.useState<string | null>(
     null,
   );
-  const [paymentState, setPaymentState] =
-    React.useState<PaymentState>("idle");
+  const [paymentState, setPaymentState] = React.useState<PaymentState>("idle");
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = React.useRef(0);
 
@@ -225,7 +224,7 @@ export function CheckoutPage() {
         .filter((item): item is NonNullable<typeof item> => item !== null);
 
       const orderTotal = calculateTotal();
-      const orderRef = `ORD-${Date.now()}`;
+      const orderRef = `ORD${Date.now()}`;
 
       // Create order in Supabase
       const { data: orderData, error: orderError } = await orders.createOrder({
@@ -270,17 +269,17 @@ export function CheckoutPage() {
       const initiateData = await initiateRes.json();
 
       if (!initiateRes.ok) {
-        showToast(
-          initiateData.error || "Kosa la kuanzisha malipo",
-          "error",
-        );
+        showToast(initiateData.error || "Kosa la kuanzisha malipo", "error");
         setPaymentState("idle");
         return;
       }
 
       // Switch to waiting UI and start polling
       setPaymentState("waiting");
-      showToast("Ombi limetumwa! Angalia simu yako na idhinisha malipo.", "info");
+      showToast(
+        "Ombi limetumwa! Angalia simu yako na idhinisha malipo.",
+        "info",
+      );
 
       pollCountRef.current = 0;
       pollRef.current = setInterval(async () => {
@@ -290,7 +289,10 @@ export function CheckoutPage() {
         if (pollCountRef.current > 36) {
           clearInterval(pollRef.current!);
           setPaymentState("failed");
-          showToast("Muda wa malipo umekwisha. Tafadhali jaribu tena.", "error");
+          showToast(
+            "Muda wa malipo umekwisha. Tafadhali jaribu tena.",
+            "error",
+          );
           return;
         }
 
@@ -475,7 +477,9 @@ export function CheckoutPage() {
               {paymentState === "initiating" && (
                 <div className="text-center py-6">
                   <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-4" />
-                  <p className="text-white font-semibold">Inatuma ombi la malipo...</p>
+                  <p className="text-white font-semibold">
+                    Inatuma ombi la malipo...
+                  </p>
                 </div>
               )}
 
@@ -483,7 +487,9 @@ export function CheckoutPage() {
               {paymentState === "waiting" && (
                 <div className="text-center py-4">
                   <div className="text-5xl mb-4 animate-bounce">📱</div>
-                  <p className="text-white font-bold text-xl mb-2">Angalia Simu Yako</p>
+                  <p className="text-white font-bold text-xl mb-2">
+                    Angalia Simu Yako
+                  </p>
                   <p className="text-amber-100 text-sm mb-4">
                     Ombi la malipo limetumwa. Idhinisha malipo ya{" "}
                     <span className="font-bold text-white">
@@ -493,7 +499,9 @@ export function CheckoutPage() {
                   </p>
                   <div className="flex items-center justify-center gap-2 mb-4">
                     <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
-                    <p className="text-amber-200 text-sm">Inasubiri uthibitisho...</p>
+                    <p className="text-amber-200 text-sm">
+                      Inasubiri uthibitisho...
+                    </p>
                   </div>
                   <button
                     type="button"
@@ -516,7 +524,8 @@ export function CheckoutPage() {
                     Malipo Hayakufanikiwa
                   </p>
                   <p className="text-amber-100 text-sm mb-6">
-                    Tafadhali hakikisha nambari ya simu ni sahihi na jaribu tena.
+                    Tafadhali hakikisha nambari ya simu ni sahihi na jaribu
+                    tena.
                   </p>
                   <button
                     type="button"
