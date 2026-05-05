@@ -615,15 +615,15 @@ export function UserProfilePage() {
                     {orders.map((order) => (
                       <div
                         key={order.id}
-                        className="border border-gray-200 rounded-xl p-6 hover:shadow-xl transition bg-gradient-to-br from-white to-gray-50"
+                        <div className="border border-gray-200 rounded-xl p-4 sm:p-6 hover:shadow-xl transition bg-gradient-to-br from-white to-gray-50">
                       >
                         {/* Header */}
                         <div className="flex justify-between items-start gap-4 mb-6 pb-6 border-b border-gray-200">
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <p className="text-xs text-left font-bold text-amber-700 uppercase tracking-widest mb-2">
                               Namba ya Agizo
                             </p>
-                            <p className="font-bold text-2xl text-left text-black">
+                            <p className="font-bold text-base sm:text-xl text-left text-black break-all">
                               #{order.order_number}
                             </p>
                           </div>
@@ -635,13 +635,13 @@ export function UserProfilePage() {
                         </div>
 
                         {/* Stats Grid */}
-                        <div className="grid grid-cols-3 gap-4 mb-6 pb-6 border-b border-gray-200">
+                        <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-6 pb-6 border-b border-gray-200">
                           {/* Date */}
-                          <div className="bg-white border border-gray-100 rounded-lg p-4 text-center hover:shadow-md transition">
-                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
+                          <div className="bg-white border border-gray-100 rounded-lg p-2 sm:p-4 text-center hover:shadow-md transition">
+                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
                               Tarehe
                             </p>
-                            <p className="text-lg font-bold text-black">
+                            <p className="text-xs sm:text-base font-bold text-black">
                               {new Date(order.created_at).toLocaleDateString(
                                 "sw-TZ",
                               )}
@@ -649,21 +649,21 @@ export function UserProfilePage() {
                           </div>
 
                           {/* Quantity */}
-                          <div className="bg-white border border-gray-100 rounded-lg p-4 text-center hover:shadow-md transition">
-                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">
+                          <div className="bg-white border border-gray-100 rounded-lg p-2 sm:p-4 text-center hover:shadow-md transition">
+                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide mb-1">
                               Idadi
                             </p>
-                            <p className="text-lg font-bold text-black">
+                            <p className="text-sm sm:text-lg font-bold text-black">
                               {order.items.length}
                             </p>
                           </div>
 
                           {/* Total */}
-                          <div className="bg-white border border-gray-100 rounded-lg p-4 text-center hover:shadow-md transition">
-                            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">
+                          <div className="bg-white border border-gray-100 rounded-lg p-2 sm:p-4 text-center hover:shadow-md transition">
+                            <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-1">
                               Jumla
                             </p>
-                            <p className="text-xl font-bold text-amber-700">
+                            <p className="text-xs sm:text-base font-bold text-amber-700">
                               Tsh {order.total.toLocaleString("sw-TZ")}
                             </p>
                           </div>

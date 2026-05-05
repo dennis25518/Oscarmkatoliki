@@ -119,7 +119,7 @@ export function Navbar() {
               <img
                 src="/Asset/official web logo.png"
                 alt="Oscar Mkatoliki"
-                className="h-24 w-auto"
+                className="h-10 sm:h-12 w-auto"
               />
             </a>
 
