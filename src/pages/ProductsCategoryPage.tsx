@@ -2,6 +2,7 @@ import * as React from "react";
 import { useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiSearch } from "react-icons/fi";
 import { products as productsApi } from "../lib/supabaseClient";
+import { useToast } from "../components/Toast";
 
 interface Product {
   id: number;
@@ -57,6 +58,8 @@ export function ProductsCategoryPage() {
     setFilteredProducts(filtered);
   }, [products, searchQuery, sortBy]);
 
+  const { showToast } = useToast();
+
   const addToCart = (productId: number) => {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
     const existingItem = cart.find(
@@ -71,6 +74,7 @@ export function ProductsCategoryPage() {
 
     localStorage.setItem("cart", JSON.stringify(cart));
     window.dispatchEvent(new Event("storage"));
+    showToast("Imewekwa Kikapuni", "success");
   };
 
   return (

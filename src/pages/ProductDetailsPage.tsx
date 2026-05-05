@@ -3,6 +3,7 @@ import * as React from "react";
 import { products as productsAPI } from "../lib/supabaseClient";
 import type { Product } from "../lib/supabaseClient";
 import Footer from "../components/Footer";
+import { useToast } from "../components/Toast";
 
 export function ProductDetailsPage() {
   const { id } = useParams();
@@ -12,6 +13,7 @@ export function ProductDetailsPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [quantity, setQuantity] = React.useState(1);
+  const { showToast } = useToast();
 
   React.useEffect(() => {
     const fetchProductDetails = async () => {
@@ -66,6 +68,7 @@ export function ProductDetailsPage() {
 
     localStorage.setItem("cart", JSON.stringify(cart));
     window.dispatchEvent(new Event("storage"));
+    showToast("Imewekwa Kikapuni", "success");
     navigate("/cart");
   };
 
@@ -248,6 +251,7 @@ export function ProductDetailsPage() {
 
                         localStorage.setItem("cart", JSON.stringify(cart));
                         window.dispatchEvent(new Event("storage"));
+                        showToast("Imewekwa Kikapuni", "success");
                         navigate("/cart");
                       }}
                       className="px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white font-semibold text-xs rounded transition"

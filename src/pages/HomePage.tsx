@@ -3,6 +3,7 @@ import {
   products as productsApi,
   maswali as maswaliApi,
 } from "../lib/supabaseClient";
+import { useToast } from "../components/Toast";
 import { MdEmail, MdPhone, MdLocationOn } from "react-icons/md";
 import { AiOutlineShoppingCart } from "react-icons/ai";
 import Footer from "../components/Footer";
@@ -73,6 +74,8 @@ export function HomePage() {
     }
   };
 
+  const { showToast } = useToast();
+
   const addToCart = (productId: number) => {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
     const existingItem = cart.find(
@@ -86,9 +89,8 @@ export function HomePage() {
     }
 
     localStorage.setItem("cart", JSON.stringify(cart));
-
-    // Trigger storage event for other tabs/windows
     window.dispatchEvent(new Event("storage"));
+    showToast("Imewekwa Kikapuni", "success");
   };
 
   return (
