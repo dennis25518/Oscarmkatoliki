@@ -111,8 +111,7 @@ export const auth = {
   },
 
   async signInWithGoogle() {
-    const redirectUrl =
-      import.meta.env.VITE_OAUTH_REDIRECT_URL || `${window.location.origin}/`;
+    const redirectUrl = `${window.location.origin}/`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
