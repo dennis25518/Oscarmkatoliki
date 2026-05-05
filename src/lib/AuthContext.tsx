@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { auth } from "./supabaseClient";
+import { auth, supabase } from "./supabaseClient";
 
 interface AuthContextType {
   user: any | null;
@@ -14,11 +14,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
+    // Check if user is already logged in and handle OAuth callbacks
     const checkAuth = async () => {
       try {
-        const currentUser = await auth.getCurrentUser();
-        setUser(currentUser);
+        // Handle OAuth callback - check for token in URL hash
+        const hash = window.location.hash;
+        if (hash && hash.includes("access_token")) {
+          // Supabase will handle the hash automatically, just get the session
+          const session = await supabase.auth.getSession();
+          if (session.data.session?.user) {
+            setUser(session.data.session.user);
+            // Clean up hash from URL
+            window.history.replaceState(
+              {},
+              document.title,
+              window.location.pathname,
+            );
+          }
+        } else {
+          const currentUser = await auth.getCurrentUser();
+          setUser(currentUser);
+        }
       } catch (error) {
         console.error("Auth check failed:", error);
       } finally {
@@ -29,12 +45,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     checkAuth();
 
     // Listen for auth changes
-    const unsubscribe = auth.onAuthStateChange((newUser) => {
-      setUser(newUser);
+    const unsubscribe = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user || null);
+      if (session?.user) {
+        // Clean up URL hash if it exists
+        if (window.location.hash.includes("access_token")) {
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname,
+          );
+        }
+      }
     });
 
     return () => {
-      unsubscribe?.unsubscribe?.();
+      unsubscribe?.data?.subscription?.unsubscribe();
     };
   }, []);
 
