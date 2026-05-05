@@ -12,6 +12,7 @@ import { useToast } from "../components/Toast";
 import {
   orders,
   paymentMethods as paymentMethodsApi,
+  sadaka as sadakaApi,
 } from "../lib/supabaseClient";
 import type { PaymentMethod } from "../lib/supabaseClient";
 
@@ -162,21 +163,43 @@ export function SadakaPage() {
           if (status === "SUCCESS" || status === "SETTLED") {
             clearInterval(pollRef.current!);
 
-            // Record order only for logged-in users
+            // Record donation – write to sadaka table + orders for history
             if (user) {
-              await orders.createOrder({
-                user_id: user.id,
-                order_number: orderRef,
-                total: donationAmount,
+              await Promise.all([
+                sadakaApi.createDonation({
+                  user_id: user.id,
+                  amount: donationAmount,
+                  network_name: providerInfo.name,
+                  phone_number: normalizedPhone,
+                  order_reference: orderRef,
+                  message: null,
+                  status: "completed",
+                }),
+                orders.createOrder({
+                  user_id: user.id,
+                  order_number: orderRef,
+                  total: donationAmount,
+                  status: "completed",
+                  items: [
+                    {
+                      product_id: "donation",
+                      name: `Sadaka - ${providerInfo.name}`,
+                      price: donationAmount,
+                      quantity: 1,
+                    },
+                  ],
+                }),
+              ]);
+            } else {
+              // Guest donation – record without user_id
+              await sadakaApi.createDonation({
+                user_id: null,
+                amount: donationAmount,
+                network_name: providerInfo.name,
+                phone_number: normalizedPhone,
+                order_reference: orderRef,
+                message: null,
                 status: "completed",
-                items: [
-                  {
-                    product_id: "donation",
-                    name: `Sadaka - ${providerInfo.name}`,
-                    price: donationAmount,
-                    quantity: 1,
-                  },
-                ],
               });
             }
 

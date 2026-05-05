@@ -4,6 +4,7 @@ import { products as productsAPI } from "../lib/supabaseClient";
 import type { Product } from "../lib/supabaseClient";
 import Footer from "../components/Footer";
 import { useToast } from "../components/Toast";
+import { CommentSection } from "../components/CommentSection";
 
 export function ProductDetailsPage() {
   const { id } = useParams();
@@ -264,6 +265,9 @@ export function ProductDetailsPage() {
             ))}
           </div>
         </div>
+
+        {/* Comments Section */}
+        <CommentSection productId={product.id} />
       </div>
 
       {/* Footer */}

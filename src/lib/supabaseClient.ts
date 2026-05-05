@@ -395,4 +395,101 @@ export const storage = {
       .getPublicUrl(filePath);
     return data.publicUrl;
   },
+
+  async uploadCommentProof(userId: string, file: File) {
+    const fileExt = file.name.split(".").pop();
+    const fileName = `comment_proofs/${userId}-${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("Mkatoliki_products")
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) return { url: null, error: uploadError };
+
+    const { data } = supabase.storage
+      .from("Mkatoliki_products")
+      .getPublicUrl(fileName);
+
+    return { url: data.publicUrl, error: null };
+  },
+};
+
+// ProductComment type
+export interface ProductComment {
+  id: string;
+  product_id: number;
+  user_id: string;
+  user_name: string;
+  user_avatar: string | null;
+  rating: number;
+  body: string;
+  proof_image_url: string | null;
+  created_at: string;
+}
+
+// Comments helper functions
+export const comments = {
+  async getComments(productId: number) {
+    const { data, error } = await supabase
+      .from("product_comments")
+      .select("*")
+      .eq("product_id", productId)
+      .order("created_at", { ascending: false });
+    return { data, error };
+  },
+
+  async createComment(
+    comment: Omit<ProductComment, "id" | "created_at">,
+  ) {
+    const { data, error } = await supabase
+      .from("product_comments")
+      .insert([comment])
+      .select()
+      .single();
+    return { data, error };
+  },
+
+  async deleteComment(commentId: string) {
+    const { error } = await supabase
+      .from("product_comments")
+      .delete()
+      .eq("id", commentId);
+    return { error };
+  },
+};
+
+// Sadaka (Donations) type
+export interface SadakaRecord {
+  id?: string;
+  user_id: string | null;
+  donor_name?: string | null;
+  amount: number;
+  currency?: string;
+  network_name: string;
+  phone_number: string;
+  order_reference: string;
+  message?: string | null;
+  status?: "pending" | "completed" | "failed";
+  created_at?: string;
+}
+
+// Sadaka helper functions
+export const sadaka = {
+  async createDonation(record: Omit<SadakaRecord, "id" | "created_at">) {
+    const { data, error } = await supabase
+      .from("sadaka")
+      .insert([record])
+      .select()
+      .single();
+    return { data, error };
+  },
+
+  async getDonations(userId: string) {
+    const { data, error } = await supabase
+      .from("sadaka")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    return { data, error };
+  },
 };
