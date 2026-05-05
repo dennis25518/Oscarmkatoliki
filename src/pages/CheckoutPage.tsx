@@ -23,13 +23,7 @@ interface CheckoutForm {
   address: string;
 }
 
-type USSDProvider = "mpesa" | "tigopesa" | "airtel" | "none";
-
-interface USSDPaymentState {
-  provider: USSDProvider;
-  pin: string;
-  showPinInput: boolean;
-}
+type PaymentState = "idle" | "initiating" | "waiting" | "failed";
 
 export function CheckoutPage() {
   const navigate = useNavigate();
@@ -39,22 +33,19 @@ export function CheckoutPage() {
   const [productDetails, setProductDetails] = React.useState<
     Record<number, Product>
   >({});
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState("");
   const [formData, setFormData] = React.useState<CheckoutForm>({
     fullName: "",
     email: "",
     phone: "",
     address: "",
   });
-  const [ussdPayment, setUssdPayment] = React.useState<USSDPaymentState>({
-    provider: "none",
-    pin: "",
-    showPinInput: false,
-  });
   const [createdOrderId, setCreatedOrderId] = React.useState<string | null>(
     null,
   );
+  const [paymentState, setPaymentState] =
+    React.useState<PaymentState>("idle");
+  const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollCountRef = React.useRef(0);
 
   // Fetch all products from Supabase
   React.useEffect(() => {
@@ -135,6 +126,21 @@ export function CheckoutPage() {
     loadUserData();
   }, [user, navigate]);
 
+  // Clean up polling interval on unmount
+  React.useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  // Normalize TZ phone numbers to 255XXXXXXXXX format
+  const normalizePhone = (phone: string): string => {
+    const cleaned = phone.replace(/[\s\-\+\(\)]/g, "");
+    if (cleaned.startsWith("0")) return "255" + cleaned.slice(1);
+    if (cleaned.startsWith("255")) return cleaned;
+    return "255" + cleaned;
+  };
+
   const calculateTotal = () => {
     return cartItems.reduce((total, item) => {
       const product = productDetails[item.id];
@@ -187,25 +193,24 @@ export function CheckoutPage() {
     }
   };
 
-  const handleUSSDPayment = async (provider: USSDProvider) => {
-    setError("");
-    setLoading(true);
-
+  const handlePayment = async () => {
     if (!user) {
-      setError("Lazima uwe umeingia kuendelea");
-      setLoading(false);
+      showToast("Lazima uwe umeingia kuendelea", "warning");
+      return;
+    }
+    if (!formData.phone) {
+      showToast(
+        "Tafadhali ongeza nambari ya simu kwenye wasifu wako kwanza",
+        "warning",
+      );
+      navigate("/profile?tab=profile");
       return;
     }
 
-    // Check if phone number is available
-    if (!formData.phone) {
-      setError("Tafadhali ingiza nambari ya simu");
-      setLoading(false);
-      return;
-    }
+    setPaymentState("initiating");
 
     try {
-      // Create order items array
+      // Build order items
       const orderItems = cartItems
         .map((item) => {
           const product = productDetails[item.id];
@@ -219,106 +224,109 @@ export function CheckoutPage() {
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
 
-      const total = calculateTotal();
+      const orderTotal = calculateTotal();
+      const orderRef = `ORD-${Date.now()}`;
 
       // Create order in Supabase
       const { data: orderData, error: orderError } = await orders.createOrder({
         user_id: user.id,
-        order_number: `ORD-${Date.now()}`,
-        total: total,
+        order_number: orderRef,
+        total: orderTotal,
         status: "pending",
         items: orderItems,
       });
 
       if (orderError) {
-        setError("Kosa la kuunda agizo: " + orderError.message);
-        setLoading(false);
+        showToast("Kosa la kuunda agizo: " + orderError.message, "error");
+        setPaymentState("idle");
         return;
       }
 
-      // Save order ID so we can mark it completed after download
-      if (orderData?.id) {
-        setCreatedOrderId(orderData.id);
-      }
+      const orderId = orderData?.id ?? null;
+      setCreatedOrderId(orderId);
 
-      // Update user profile
-      const { error: profileError } = await profiles.updateProfile(user.id, {
-        name: formData.fullName,
-        email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
+      // Update profile in background (non-blocking)
+      profiles
+        .updateProfile(user.id, {
+          name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          address: formData.address,
+        })
+        .catch((e) => console.warn("Profile update warning:", e));
+
+      // Initiate ClickPesa USSD push
+      const phone = normalizePhone(formData.phone);
+      const initiateRes = await fetch("/api/clickpesa/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phoneNumber: phone,
+          amount: String(orderTotal),
+          orderReference: orderRef,
+        }),
       });
 
-      if (profileError) {
-        console.warn("Profile update warning:", profileError);
+      const initiateData = await initiateRes.json();
+
+      if (!initiateRes.ok) {
+        showToast(
+          initiateData.error || "Kosa la kuanzisha malipo",
+          "error",
+        );
+        setPaymentState("idle");
+        return;
       }
 
-      // Trigger USSD payment
-      const ussdCodes: Record<USSDProvider, string> = {
-        mpesa: `*150*01#`, // M-Pesa code
-        tigopesa: `*150#`, // Tigo Pesa code
-        airtel: `*150#`, // Airtel Money code
-        none: "",
-      };
+      // Switch to waiting UI and start polling
+      setPaymentState("waiting");
+      showToast("Ombi limetumwa! Angalia simu yako na idhinisha malipo.", "info");
 
-      if (ussdCodes[provider]) {
-        // Show PIN input modal
-        setUssdPayment({
-          provider,
-          pin: "",
-          showPinInput: true,
-        });
-      }
+      pollCountRef.current = 0;
+      pollRef.current = setInterval(async () => {
+        pollCountRef.current += 1;
 
-      setLoading(false);
+        // Timeout after ~3 minutes (36 × 5 s)
+        if (pollCountRef.current > 36) {
+          clearInterval(pollRef.current!);
+          setPaymentState("failed");
+          showToast("Muda wa malipo umekwisha. Tafadhali jaribu tena.", "error");
+          return;
+        }
+
+        try {
+          const statusRes = await fetch(
+            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
+          );
+          const { status } = await statusRes.json();
+
+          if (status === "SUCCESS" || status === "SETTLED") {
+            clearInterval(pollRef.current!);
+            showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
+            await downloadOrderBooks();
+
+            if (orderId) {
+              await orders.updateOrder(orderId, { status: "completed" });
+            }
+
+            localStorage.setItem("cart", JSON.stringify([]));
+            window.dispatchEvent(new Event("storage"));
+            showToast("Agizo lako limekamilika!", "success", 5000);
+            navigate("/profile");
+          } else if (status === "FAILED") {
+            clearInterval(pollRef.current!);
+            setPaymentState("failed");
+            showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");
+          }
+          // PROCESSING / PENDING → keep polling
+        } catch (e) {
+          console.error("Status poll error:", e);
+        }
+      }, 5000);
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Hitilafu isiyojulikana iliotokea";
-      setError(errorMessage);
-      setLoading(false);
-    }
-  };
-
-  const handlePINSubmit = async () => {
-    if (!ussdPayment.pin || ussdPayment.pin.length < 4) {
-      showToast("Tafadhali ingiza PIN sahihi (angalau tarakimu 4)", "warning");
-      return;
-    }
-
-    setLoading(true);
-    showToast("Inashughulikia malipo...", "info");
-    try {
-      // Simulate USSD payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Trigger automatic downloads for all books in the order
-      showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
-      await downloadOrderBooks();
-
-      // Mark order as completed after successful download
-      if (createdOrderId) {
-        await orders.updateOrder(createdOrderId, { status: "completed" });
-      }
-
-      // Clear cart and navigate
-      localStorage.setItem("cart", JSON.stringify([]));
-      window.dispatchEvent(new Event("storage"));
-
-      // Reset USSD state
-      setUssdPayment({
-        provider: "none",
-        pin: "",
-        showPinInput: false,
-      });
-
-      showToast("Agizo lako limekamilika!", "success", 5000);
-      navigate("/profile");
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Malipo hayakufanya kazi";
-      showToast(errorMessage, "error");
-    } finally {
-      setLoading(false);
+      const msg = err instanceof Error ? err.message : "Hitilafu isiyojulikana";
+      showToast(msg, "error");
+      setPaymentState("idle");
     }
   };
 
@@ -370,12 +378,6 @@ export function CheckoutPage() {
               <h2 className="text-2xl font-bold text-black mb-6">
                 Taarifa za Mtumiaji
               </h2>
-
-              {error && (
-                <div className="p-4 mb-6 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                  {error}
-                </div>
-              )}
 
               {/* Info Display Sections */}
               <div className="space-y-6">
@@ -449,65 +451,80 @@ export function CheckoutPage() {
             <div className="bg-gradient-to-r from-amber-700 to-amber-600 rounded-2xl shadow-lg p-8 text-white">
               <h2 className="text-2xl font-bold mb-6">Fanya Malipo</h2>
 
-              <div className="space-y-4">
-                <p className="text-sm text-amber-50">Jumla ya Kulipa</p>
-                <div className="text-4xl font-bold mb-6">
-                  Tsh {total.toLocaleString("sw-TZ")}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleUSSDPayment("mpesa")}
-                  disabled={loading}
-                  className="w-full px-8 py-4 bg-white hover:bg-gray-50 text-amber-700 font-bold rounded-lg transition disabled:opacity-50 text-lg"
-                >
-                  {loading ? "Inakusajifu..." : "Lipa Sasa"}
-                </button>
-              </div>
-
-              {/* PIN Input Modal */}
-              {ussdPayment.showPinInput && (
-                <div className="mt-6 p-4 bg-white text-black rounded-lg border-2 border-white">
-                  <p className="text-sm font-semibold mb-4">
-                    Ingiza PIN yako ya {ussdPayment.provider.toUpperCase()} ili
-                    kukamilisha malipo ya Tsh{" "}
-                    {calculateTotal().toLocaleString("sw-TZ")}
-                  </p>
-                  <div className="flex gap-3">
-                    <input
-                      type="password"
-                      value={ussdPayment.pin}
-                      onChange={(e) =>
-                        setUssdPayment((prev) => ({
-                          ...prev,
-                          pin: e.target.value,
-                        }))
-                      }
-                      placeholder="••••"
-                      maxLength={4}
-                      className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-amber-700 focus:ring-1 focus:ring-amber-700"
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePINSubmit}
-                      disabled={loading || ussdPayment.pin.length < 4}
-                      className="px-6 py-2 bg-amber-700 hover:bg-amber-600 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      {loading ? "Inakusajifu..." : "Lipa"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setUssdPayment({
-                          provider: "none",
-                          pin: "",
-                          showPinInput: false,
-                        })
-                      }
-                      className="px-4 py-2 border border-gray-300 text-black rounded-lg hover:bg-gray-50 transition"
-                    >
-                      Ghairi
-                    </button>
+              {/* Idle – show pay button */}
+              {paymentState === "idle" && (
+                <div className="space-y-4">
+                  <p className="text-sm text-amber-50">Jumla ya Kulipa</p>
+                  <div className="text-4xl font-bold mb-6">
+                    Tsh {total.toLocaleString("sw-TZ")}
                   </div>
+                  <button
+                    type="button"
+                    onClick={handlePayment}
+                    className="w-full px-8 py-4 bg-white hover:bg-gray-50 text-amber-700 font-bold rounded-lg transition text-lg"
+                  >
+                    Lipa Sasa
+                  </button>
+                  <p className="text-xs text-amber-200 text-center">
+                    Utapata ombi la USSD kwenye simu yako
+                  </p>
+                </div>
+              )}
+
+              {/* Initiating – spinner while creating order & calling API */}
+              {paymentState === "initiating" && (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent mx-auto mb-4" />
+                  <p className="text-white font-semibold">Inatuma ombi la malipo...</p>
+                </div>
+              )}
+
+              {/* Waiting – USSD push sent, polling for confirmation */}
+              {paymentState === "waiting" && (
+                <div className="text-center py-4">
+                  <div className="text-5xl mb-4 animate-bounce">📱</div>
+                  <p className="text-white font-bold text-xl mb-2">Angalia Simu Yako</p>
+                  <p className="text-amber-100 text-sm mb-4">
+                    Ombi la malipo limetumwa. Idhinisha malipo ya{" "}
+                    <span className="font-bold text-white">
+                      Tsh {total.toLocaleString("sw-TZ")}
+                    </span>{" "}
+                    kwenye simu yako.
+                  </p>
+                  <div className="flex items-center justify-center gap-2 mb-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent" />
+                    <p className="text-amber-200 text-sm">Inasubiri uthibitisho...</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pollRef.current) clearInterval(pollRef.current);
+                      setPaymentState("idle");
+                    }}
+                    className="text-amber-300 text-sm underline hover:text-white transition"
+                  >
+                    Ghairi
+                  </button>
+                </div>
+              )}
+
+              {/* Failed – show retry */}
+              {paymentState === "failed" && (
+                <div className="text-center py-4">
+                  <div className="text-5xl mb-4">❌</div>
+                  <p className="text-white font-bold text-lg mb-2">
+                    Malipo Hayakufanikiwa
+                  </p>
+                  <p className="text-amber-100 text-sm mb-6">
+                    Tafadhali hakikisha nambari ya simu ni sahihi na jaribu tena.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentState("idle")}
+                    className="px-6 py-2 bg-white text-amber-700 font-bold rounded-lg hover:bg-gray-50 transition"
+                  >
+                    Jaribu Tena
+                  </button>
                 </div>
               )}
             </div>
