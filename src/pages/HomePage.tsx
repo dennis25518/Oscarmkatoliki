@@ -276,7 +276,7 @@ export function HomePage() {
                     </div>
                     <div className="flex items-center gap-2 text-black">
                       <span className="text-xl">📖</span>
-                      <span>Sala, Rozari, at Litania Takatifu</span>
+                      <span>Sala, Rozari na Litania Takatifu</span>
                     </div>
                   </div>
 
@@ -310,7 +310,7 @@ export function HomePage() {
                       className="flex-1 py-4 px-6 bg-gradient-to-r from-amber-700 to-yellow-700 hover:from-amber-800 hover:to-yellow-800 text-white font-bold text-lg rounded-xl transition duration-300 transform hover:scale-105 shadow-lg hover:shadow-2xl flex items-center justify-center gap-2"
                     >
                       <AiOutlineShoppingCart size={24} />
-                      Nunua Sasa
+                      Nunua
                     </button>
                   </div>
                 </div>
