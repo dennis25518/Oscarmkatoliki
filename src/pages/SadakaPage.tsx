@@ -1,44 +1,41 @@
 import * as React from "react";
 import { useNavigate } from "react-router-dom";
-import { FiArrowLeft, FiHeart } from "react-icons/fi";
+import {
+  FiArrowLeft,
+  FiHeart,
+  FiPhone,
+  FiCheckCircle,
+  FiCreditCard,
+} from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
 import { useToast } from "../components/Toast";
-import { orders, profiles } from "../lib/supabaseClient";
+import {
+  orders,
+  paymentMethods as paymentMethodsApi,
+} from "../lib/supabaseClient";
+import type { PaymentMethod } from "../lib/supabaseClient";
 
 type DonationProvider = "mpesa" | "tigopesa" | "airtel" | "halo";
-type PaymentState = "idle" | "initiating" | "waiting" | "failed";
+type PaymentState = "idle" | "initiating" | "waiting" | "failed" | "success";
 
 const PROVIDERS: {
   name: string;
   provider: DonationProvider;
-  color: string;
   image: string;
 }[] = [
-  {
-    name: "M-Pesa",
-    provider: "mpesa",
-    color: "bg-gradient-to-br from-blue-500 to-blue-600",
-    image: "/Asset/mpesa.png",
-  },
-  {
-    name: "Airtel Money",
-    provider: "airtel",
-    color: "bg-gradient-to-br from-red-500 to-red-600",
-    image: "/Asset/airtelmoney.png",
-  },
-  {
-    name: "TIGO Pesa",
-    provider: "tigopesa",
-    color: "bg-gradient-to-br from-yellow-500 to-yellow-600",
-    image: "/Asset/mixx.png",
-  },
-  {
-    name: "Halo Pesa",
-    provider: "halo",
-    color: "bg-gradient-to-br from-purple-500 to-purple-600",
-    image: "/Asset/halopesa.png",
-  },
+  { name: "M-Pesa", provider: "mpesa", image: "/Asset/mpesa.png" },
+  { name: "Airtel Money", provider: "airtel", image: "/Asset/airtelmoney.png" },
+  { name: "TIGO Pesa", provider: "tigopesa", image: "/Asset/mixx.png" },
+  { name: "Halo Pesa", provider: "halo", image: "/Asset/halopesa.png" },
 ];
+
+const networkToProvider = (networkName: string): DonationProvider => {
+  const n = networkName.toLowerCase();
+  if (n.includes("mpesa") || n.includes("m-pesa")) return "mpesa";
+  if (n.includes("airtel")) return "airtel";
+  if (n.includes("tigo") || n.includes("mixx")) return "tigopesa";
+  return "halo";
+};
 
 export function SadakaPage() {
   const navigate = useNavigate();
@@ -49,7 +46,25 @@ export function SadakaPage() {
   const [customAmount, setCustomAmount] = React.useState("");
   const [message, setMessage] = React.useState("");
   const [paymentState, setPaymentState] = React.useState<PaymentState>("idle");
-  const [userPhone, setUserPhone] = React.useState("");
+
+  // Saved payment method for logged-in users
+  const [savedMethod, setSavedMethod] = React.useState<PaymentMethod | null>(
+    null,
+  );
+  const [loadingProfile, setLoadingProfile] = React.useState(false);
+  const [hasNoPaymentMethod, setHasNoPaymentMethod] = React.useState(false);
+
+  // Guest flow
+  const [selectedProvider, setSelectedProvider] =
+    React.useState<DonationProvider | null>(null);
+  const [guestPhone, setGuestPhone] = React.useState("");
+
+  // Success screen data
+  const [successData, setSuccessData] = React.useState<{
+    amount: number;
+    providerName: string;
+    providerImage: string;
+  } | null>(null);
 
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = React.useRef(0);
@@ -57,14 +72,18 @@ export function SadakaPage() {
   const donationAmounts = [5000, 10000, 25000, 50000, 100000];
 
   React.useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
-    profiles.getProfile(user.id).then(({ data }) => {
-      if (data?.phone) setUserPhone(data.phone);
+    if (!user) return;
+    setLoadingProfile(true);
+    paymentMethodsApi.getPaymentMethods(user.id).then(({ data }) => {
+      if (data && data.length > 0) {
+        setSavedMethod(data[0]);
+        setHasNoPaymentMethod(false);
+      } else {
+        setHasNoPaymentMethod(true);
+      }
+      setLoadingProfile(false);
     });
-  }, [user, navigate]);
+  }, [user]);
 
   React.useEffect(() => {
     return () => {
@@ -82,38 +101,29 @@ export function SadakaPage() {
     return "255" + cleaned;
   };
 
-  const handleDonate = async (provider: DonationProvider) => {
-    if (!user) {
-      showToast("Lazima uwe umeingia kuendelea", "warning");
-      return;
-    }
-
+  const handleDonate = async (provider: DonationProvider, phone: string) => {
     const donationAmount = getAmountToUse();
     if (!donationAmount || donationAmount < 500) {
       showToast("Tafadhali ingiza kiasi sahihi (angalau Tsh 500)", "warning");
       return;
     }
-
-    if (!userPhone) {
-      showToast(
-        "Tafadhali ongeza nambari ya simu kwenye wasifu wako kwanza",
-        "warning",
-      );
-      navigate("/profile?tab=account");
+    if (!phone.trim()) {
+      showToast("Tafadhali ingiza nambari ya simu", "warning");
       return;
     }
 
     setPaymentState("initiating");
 
     try {
-      const phone = normalizePhone(userPhone);
+      const normalizedPhone = normalizePhone(phone);
       const orderRef = `DON${Date.now()}`;
+      const providerInfo = PROVIDERS.find((p) => p.provider === provider)!;
 
       const initiateRes = await fetch("/api/clickpesa/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phoneNumber: phone,
+          phoneNumber: normalizedPhone,
           amount: String(donationAmount),
           orderReference: orderRef,
         }),
@@ -128,10 +138,6 @@ export function SadakaPage() {
       }
 
       setPaymentState("waiting");
-      showToast(
-        "Ombi limetumwa! Angalia simu yako na idhinisha sadaka.",
-        "info",
-      );
 
       pollCountRef.current = 0;
       pollRef.current = setInterval(async () => {
@@ -155,33 +161,31 @@ export function SadakaPage() {
 
           if (status === "SUCCESS" || status === "SETTLED") {
             clearInterval(pollRef.current!);
-            const providerName =
-              PROVIDERS.find((p) => p.provider === provider)?.name ?? provider;
 
-            await orders.createOrder({
-              user_id: user.id,
-              order_number: orderRef,
-              total: donationAmount,
-              status: "completed",
-              items: [
-                {
-                  product_id: "donation",
-                  name: `Sadaka - ${providerName}`,
-                  price: donationAmount,
-                  quantity: 1,
-                },
-              ],
+            // Record order only for logged-in users
+            if (user) {
+              await orders.createOrder({
+                user_id: user.id,
+                order_number: orderRef,
+                total: donationAmount,
+                status: "completed",
+                items: [
+                  {
+                    product_id: "donation",
+                    name: `Sadaka - ${providerInfo.name}`,
+                    price: donationAmount,
+                    quantity: 1,
+                  },
+                ],
+              });
+            }
+
+            setSuccessData({
+              amount: donationAmount,
+              providerName: providerInfo.name,
+              providerImage: providerInfo.image,
             });
-
-            setPaymentState("idle");
-            setCustomAmount("");
-            setMessage("");
-            showToast(
-              `Asante sana! Sadaka yako ya Tsh ${donationAmount.toLocaleString("sw-TZ")} imepokelewa. Mungu akubariki!`,
-              "success",
-              7000,
-            );
-            setTimeout(() => navigate("/profile?tab=orders"), 3000);
+            setPaymentState("success");
           } else if (status === "FAILED") {
             clearInterval(pollRef.current!);
             setPaymentState("failed");
@@ -198,9 +202,79 @@ export function SadakaPage() {
     }
   };
 
-  if (!user) return null;
-
   const displayAmount = getAmountToUse();
+
+  // ── SUCCESS SCREEN ──
+  if (paymentState === "success" && successData) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-white to-amber-50 flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-10 text-center">
+          <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <FiCheckCircle size={56} className="text-green-500" />
+          </div>
+          <h1 className="text-3xl font-bold text-black mb-2">Asante Sana!</h1>
+          <p className="text-gray-500 mb-8">
+            Sadaka yako imepokelewa. Mungu akubariki!
+          </p>
+          <div className="bg-amber-50 rounded-xl p-6 mb-6 border border-amber-200">
+            <img
+              src={successData.providerImage}
+              alt={successData.providerName}
+              className="w-16 h-16 mx-auto mb-3 object-contain"
+            />
+            <p className="text-sm text-gray-500 mb-1">
+              {successData.providerName}
+            </p>
+            <p className="text-4xl font-bold text-amber-700">
+              Tsh {successData.amount.toLocaleString("sw-TZ")}
+            </p>
+            <p className="text-sm text-gray-400 mt-2">
+              imepokelewa kwa mafanikio
+            </p>
+          </div>
+          <div className="bg-green-50 rounded-lg p-4 mb-8 border border-green-200">
+            <p className="text-sm text-green-800 italic">
+              "Kila mtu amtolee kama alivyokusudia moyoni mwake; si kwa
+              huzuni, wala si kwa lazima; maana Mungu hupenda yeye atoaye kwa
+              furaha."
+            </p>
+            <p className="text-xs text-green-600 mt-2 font-semibold">
+              — 2 Wakorintho 9:7
+            </p>
+          </div>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => navigate("/")}
+              className="w-full py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg transition"
+            >
+              Rudi Nyumbani
+            </button>
+            {user && (
+              <button
+                onClick={() => navigate("/profile?tab=orders")}
+                className="w-full py-3 border border-amber-700 text-amber-700 hover:bg-amber-50 font-semibold rounded-lg transition"
+              >
+                Angalia Historia ya Sadaka
+              </button>
+            )}
+            <button
+              onClick={() => {
+                setPaymentState("idle");
+                setSuccessData(null);
+                setCustomAmount("");
+                setMessage("");
+                setGuestPhone("");
+                setSelectedProvider(null);
+              }}
+              className="text-sm text-gray-400 hover:text-gray-600 transition mt-1"
+            >
+              Toa Sadaka Nyingine
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50 py-8 px-4">
@@ -290,31 +364,159 @@ export function SadakaPage() {
               </p>
             </div>
 
-            {/* Provider selection – idle only */}
+            {/* Payment section */}
             {paymentState === "idle" && (
               <div className="bg-white rounded-lg shadow-md p-8">
-                <h2 className="text-2xl font-bold text-black mb-2">
-                  Chagua Njia ya Malipo
+                <h2 className="text-2xl font-bold text-black mb-6">
+                  Njia ya Malipo
                 </h2>
-                <p className="text-gray-600 mb-6">
-                  Chagua njia ya simu ya pesa unayopendelea
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  {PROVIDERS.map((method) => (
-                    <button
-                      key={method.provider}
-                      onClick={() => handleDonate(method.provider)}
-                      className={`${method.color} p-6 rounded-lg text-white font-semibold transition transform hover:scale-105 hover:shadow-lg`}
-                    >
+
+                {/* Loading */}
+                {user && loadingProfile && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-amber-700 border-t-transparent" />
+                  </div>
+                )}
+
+                {/* Logged-in: has saved payment method */}
+                {user && !loadingProfile && savedMethod && (
+                  <div>
+                    <p className="text-gray-600 mb-4">
+                      Tumia nambari yako iliyohifadhiwa:
+                    </p>
+                    <div className="flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-xl mb-6">
                       <img
-                        src={method.image}
-                        alt={method.name}
-                        className="w-16 h-16 mx-auto mb-3 object-contain rounded-lg bg-white/20 p-1"
+                        src={
+                          PROVIDERS.find(
+                            (p) =>
+                              networkToProvider(savedMethod.network_name) ===
+                              p.provider,
+                          )?.image ?? "/Asset/mpesa.png"
+                        }
+                        alt={savedMethod.network_name}
+                        className="w-14 h-14 object-contain"
                       />
-                      <div>{method.name}</div>
+                      <div>
+                        <p className="font-bold text-black">
+                          {savedMethod.network_name}
+                        </p>
+                        <p className="text-gray-600 text-sm">
+                          +255{savedMethod.network_number?.slice(-7)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() =>
+                        handleDonate(
+                          networkToProvider(savedMethod.network_name),
+                          savedMethod.network_number ?? "",
+                        )
+                      }
+                      className="w-full py-4 bg-amber-700 hover:bg-amber-800 text-white font-bold text-lg rounded-xl transition"
+                    >
+                      Toa Sadaka ya Tsh {displayAmount.toLocaleString("sw-TZ")}
                     </button>
-                  ))}
-                </div>
+                    <button
+                      onClick={() => navigate("/profile?tab=account")}
+                      className="w-full mt-3 text-sm text-amber-700 hover:underline"
+                    >
+                      Badilisha njia ya malipo
+                    </button>
+                  </div>
+                )}
+
+                {/* Logged-in: no payment method saved */}
+                {user && !loadingProfile && hasNoPaymentMethod && (
+                  <div className="text-center py-6">
+                    <FiCreditCard
+                      size={48}
+                      className="mx-auto text-gray-300 mb-4"
+                    />
+                    <p className="text-gray-600 mb-2">
+                      Hujahifadhi njia ya malipo.
+                    </p>
+                    <p className="text-gray-500 text-sm mb-6">
+                      Ongeza nambari yako ya simu kwenye wasifu wako kwanza.
+                    </p>
+                    <button
+                      onClick={() => navigate("/profile?tab=account")}
+                      className="px-8 py-3 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-lg transition"
+                    >
+                      Ongeza Njia ya Malipo
+                    </button>
+                  </div>
+                )}
+
+                {/* Guest: network icons row + phone input */}
+                {!user && (
+                  <div>
+                    <p className="text-gray-600 mb-6">
+                      Chagua mtandao wako wa malipo:
+                    </p>
+                    <div className="flex justify-around items-start gap-2 mb-6">
+                      {PROVIDERS.map((p) => (
+                        <button
+                          key={p.provider}
+                          onClick={() => {
+                            setSelectedProvider(p.provider);
+                            setGuestPhone("");
+                          }}
+                          className={`flex flex-col items-center gap-2 p-3 rounded-xl transition border-2 ${
+                            selectedProvider === p.provider
+                              ? "border-amber-700 bg-amber-50 shadow-md"
+                              : "border-transparent hover:border-amber-300 hover:bg-amber-50"
+                          }`}
+                        >
+                          <img
+                            src={p.image}
+                            alt={p.name}
+                            className="w-14 h-14 object-contain"
+                          />
+                          <span className="text-xs font-semibold text-gray-600">
+                            {p.name}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {selectedProvider && (
+                      <div className="border-t border-gray-100 pt-6">
+                        <label className="block text-sm font-semibold text-black mb-2">
+                          <span className="flex items-center gap-2">
+                            <FiPhone size={16} />
+                            Ingiza Nambari ya Simu
+                          </span>
+                        </label>
+                        <div className="flex gap-3">
+                          <div className="flex items-center px-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm font-semibold">
+                            +255
+                          </div>
+                          <input
+                            type="tel"
+                            value={guestPhone}
+                            onChange={(e) => setGuestPhone(e.target.value)}
+                            placeholder="7XX XXX XXX"
+                            maxLength={12}
+                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
+                          />
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Mfano: 0712345678 au 712345678
+                        </p>
+                        <button
+                          onClick={() =>
+                            handleDonate(selectedProvider, guestPhone)
+                          }
+                          disabled={!guestPhone.trim()}
+                          className="w-full mt-4 py-4 bg-amber-700 hover:bg-amber-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition"
+                        >
+                          Toa Sadaka ya Tsh{" "}
+                          {displayAmount.toLocaleString("sw-TZ")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -331,7 +533,29 @@ export function SadakaPage() {
             {/* Waiting */}
             {paymentState === "waiting" && (
               <div className="bg-white rounded-lg shadow-md p-10 text-center">
-                <div className="text-5xl mb-4 animate-bounce">📱</div>
+                {(() => {
+                  const prov = selectedProvider
+                    ? PROVIDERS.find((p) => p.provider === selectedProvider)
+                    : savedMethod
+                      ? PROVIDERS.find(
+                          (p) =>
+                            networkToProvider(savedMethod.network_name) ===
+                            p.provider,
+                        )
+                      : null;
+                  return prov ? (
+                    <img
+                      src={prov.image}
+                      alt={prov.name}
+                      className="w-20 h-20 mx-auto mb-4 object-contain animate-pulse"
+                    />
+                  ) : (
+                    <FiPhone
+                      size={48}
+                      className="mx-auto mb-4 text-amber-700 animate-pulse"
+                    />
+                  );
+                })()}
                 <p className="text-black font-bold text-xl mb-2">
                   Angalia Simu Yako
                 </p>
@@ -416,6 +640,20 @@ export function SadakaPage() {
                   huduma zetu za kikristo na kusambaza Injili.
                 </p>
               </div>
+              {!user && (
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Una akaunti?</strong>{" "}
+                    <button
+                      onClick={() => navigate("/login")}
+                      className="underline font-semibold"
+                    >
+                      Ingia
+                    </button>{" "}
+                    ili historia yako ya sadaka ihifadhiwe.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
