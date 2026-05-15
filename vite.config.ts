@@ -27,17 +27,35 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
-        name: "snippe-api-dev-middleware",
+        name: "clickpesa-api-dev-middleware",
         configureServer(server) {
-          const apiKey = env.SNIPPE_API_KEY;
+          const clientId = env.CLICKPESA_CLIENT_ID;
+          const apiKey = env.CLICKPESA_API_KEY;
 
-          // POST /api/snippe/initiate
+          const getToken = async (): Promise<string | null> => {
+            try {
+              const tokenRes = await fetch(
+                "https://api.clickpesa.com/third-parties/generate-token",
+                {
+                  method: "POST",
+                  headers: { "client-id": clientId!, "api-key": apiKey! },
+                },
+              );
+              if (!tokenRes.ok) return null;
+              const { token } = await tokenRes.json();
+              return token as string;
+            } catch {
+              return null;
+            }
+          };
+
+          // POST /api/clickpesa/initiate
           server.middlewares.use(
-            "/api/snippe/initiate",
+            "/api/clickpesa/initiate",
             async (req: IncomingMessage, res: ServerResponse, next) => {
               if (req.method !== "POST") return next();
 
-              if (!apiKey) {
+              if (!clientId || !apiKey) {
                 return json(res, 500, {
                   error: "Payment service not configured",
                 });
@@ -45,14 +63,7 @@ export default defineConfig(({ mode }) => {
 
               try {
                 const raw = await readBody(req);
-                const {
-                  phoneNumber,
-                  amount,
-                  orderReference,
-                  firstname: rawFirstname,
-                  lastname: rawLastname,
-                  customerEmail,
-                } = JSON.parse(raw);
+                const { phoneNumber, amount, orderReference } = JSON.parse(raw);
 
                 if (!phoneNumber || !amount || !orderReference) {
                   return json(res, 400, {
@@ -61,136 +72,104 @@ export default defineConfig(({ mode }) => {
                   });
                 }
 
-                const firstname = (rawFirstname || "Customer").trim();
-                const lastname = (rawLastname || firstname).trim() || firstname;
+                const token = await getToken();
+                if (!token) {
+                  return json(res, 502, {
+                    error: "Failed to authenticate with payment provider",
+                  });
+                }
 
-                const customerObj: Record<string, string> = {
-                  firstname,
-                  lastname,
-                  email: customerEmail || `guest@donation.tz`,
-                };
-
-                const paymentRes = await fetch(
-                  "https://api.snippe.sh/v1/payments",
+                const pushRes = await fetch(
+                  "https://api.clickpesa.com/third-parties/payments/initiate-ussd-push-request",
                   {
                     method: "POST",
                     headers: {
-                      Authorization: `Bearer ${apiKey}`,
+                      Authorization: token,
                       "Content-Type": "application/json",
-                      "Idempotency-Key": `order-${orderReference}`,
                     },
                     body: JSON.stringify({
-                      payment_type: "mobile",
-                      details: { amount: Number(amount), currency: "TZS" },
-                      phone_number: String(phoneNumber),
-                      customer: customerObj,
-                      metadata: { order_id: String(orderReference) },
+                      amount: String(amount),
+                      currency: "TZS",
+                      orderReference: String(orderReference),
+                      phoneNumber: String(phoneNumber),
                     }),
                   },
                 );
 
-                const paymentData = await paymentRes.json();
+                const pushData = await pushRes.json();
 
-                if (!paymentRes.ok) {
+                if (!pushRes.ok) {
                   console.error(
-                    "Snippe API error:",
-                    JSON.stringify(paymentData),
+                    "ClickPesa initiate error:",
+                    JSON.stringify(pushData),
                   );
-                  const errMsg =
-                    paymentData?.message ||
-                    paymentData?.error ||
-                    (Array.isArray(paymentData?.errors)
-                      ? paymentData.errors
-                          .map((e: any) => e.message || e)
-                          .join(", ")
-                      : null) ||
-                    "Failed to initiate payment";
-                  return json(res, paymentRes.status, { error: errMsg });
-                }
-
-                const payment = paymentData?.data ?? paymentData;
-                const paymentRef = payment.reference;
-
-                // Trigger the USSD push to the customer's phone
-                try {
-                  const pushRes = await fetch(
-                    `https://api.snippe.sh/v1/payments/${paymentRef}/push`,
-                    {
-                      method: "POST",
-                      headers: {
-                        Authorization: `Bearer ${apiKey}`,
-                        "Content-Type": "application/json",
-                      },
-
-                    },
-                  );
-                  const pushData = await pushRes.json().catch(() => null);
-                  if (!pushRes.ok) {
-                    console.error(
-                      `USSD push failed (${pushRes.status}):`,
-                      JSON.stringify(pushData),
-                    );
-                  } else {
-                    console.log("USSD push triggered:", JSON.stringify(pushData));
-                  }
-                } catch (pushErr) {
-                  console.error("USSD push network error:", pushErr);
+                  return json(res, pushRes.status, {
+                    error: pushData.message || "Failed to initiate USSD push",
+                  });
                 }
 
                 return json(res, 200, {
-                  reference: paymentRef,
-                  status: payment.status,
-                  orderReference,
+                  id: pushData.id,
+                  status: pushData.status,
+                  orderReference: pushData.orderReference,
                 });
               } catch (err) {
-                console.error("Snippe initiate error:", err);
+                console.error("ClickPesa initiate error:", err);
                 return json(res, 500, { error: "Internal server error" });
               }
             },
           );
 
-          // GET /api/snippe/status
+          // GET /api/clickpesa/status
           server.middlewares.use(
-            "/api/snippe/status",
+            "/api/clickpesa/status",
             async (req: IncomingMessage, res: ServerResponse, next) => {
               if (req.method !== "GET") return next();
 
-              if (!apiKey) {
+              if (!clientId || !apiKey) {
                 return json(res, 500, {
                   error: "Payment service not configured",
                 });
               }
 
               const url = new URL(req.url!, `http://localhost`);
-              const paymentReference = url.searchParams.get("paymentReference");
+              const orderReference = url.searchParams.get("orderReference");
 
-              if (!paymentReference) {
+              if (!orderReference) {
                 return json(res, 400, {
-                  error: "Missing paymentReference query param",
+                  error: "Missing orderReference query param",
                 });
               }
 
               try {
-                const statusRes = await fetch(
-                  `https://api.snippe.sh/v1/payments/${encodeURIComponent(paymentReference)}`,
-                  { headers: { Authorization: `Bearer ${apiKey}` } },
-                );
-
-                const data = await statusRes.json();
-
-                if (!statusRes.ok) {
-                  return json(res, statusRes.status, {
-                    error: data?.message || "Failed to query payment status",
+                const token = await getToken();
+                if (!token) {
+                  return json(res, 502, {
+                    error: "Failed to authenticate with payment provider",
                   });
                 }
 
-                const payment = data?.data ?? data;
+                const statusRes = await fetch(
+                  `https://api.clickpesa.com/third-parties/payments/${encodeURIComponent(orderReference)}`,
+                  { headers: { Authorization: token } },
+                );
+
+                if (!statusRes.ok) {
+                  const err = await statusRes.json().catch(() => ({}));
+                  return json(res, statusRes.status, {
+                    error:
+                      (err as any).message || "Failed to query payment status",
+                  });
+                }
+
+                const data = await statusRes.json();
+                const payment = Array.isArray(data) ? data[0] : data;
                 return json(res, 200, {
-                  status: payment?.status ?? "pending",
+                  status: payment?.status ?? "PROCESSING",
                   payment,
                 });
               } catch (err) {
-                console.error("Snippe status error:", err);
+                console.error("ClickPesa status error:", err);
                 return json(res, 500, { error: "Internal server error" });
               }
             },

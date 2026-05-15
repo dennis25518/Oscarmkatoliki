@@ -83,7 +83,6 @@ export default async function handler(req: any, res: any) {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-
         },
       );
       const pushData = await pushRes.json().catch(() => null);

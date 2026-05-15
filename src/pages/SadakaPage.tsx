@@ -143,16 +143,13 @@ export function SadakaPage() {
       const orderRef = `DON${Date.now()}`;
       const providerInfo = PROVIDERS.find((p) => p.provider === provider)!;
 
-      const initiateRes = await fetch("/api/snippe/initiate", {
+      const initiateRes = await fetch("/api/clickpesa/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: normalizedPhone,
           amount: String(donationAmount),
           orderReference: orderRef,
-          firstname: firstname.trim(),
-          lastname: lastname.trim() || firstname.trim(),
-          customerEmail: user?.email,
         }),
       });
 
@@ -167,8 +164,6 @@ export function SadakaPage() {
         setPaymentState("idle");
         return;
       }
-
-      const snippeReference: string = initiateData.reference;
 
       setPaymentState("waiting");
       showToast(
@@ -192,11 +187,11 @@ export function SadakaPage() {
 
         try {
           const statusRes = await fetch(
-            `/api/snippe/status?paymentReference=${encodeURIComponent(snippeReference)}`,
+            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
           );
           const { status } = await statusRes.json();
 
-          if (status === "completed") {
+          if (status === "SUCCESS") {
             clearInterval(pollRef.current!);
 
             // Record donation – write to sadaka table + orders for history
@@ -245,11 +240,7 @@ export function SadakaPage() {
               providerImage: providerInfo.image,
             });
             setPaymentState("success");
-          } else if (
-            status === "failed" ||
-            status === "voided" ||
-            status === "expired"
-          ) {
+          } else if (status === "FAILED") {
             clearInterval(pollRef.current!);
             setPaymentState("failed");
             showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");

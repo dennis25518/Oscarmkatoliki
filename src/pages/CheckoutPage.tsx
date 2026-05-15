@@ -236,19 +236,15 @@ export function CheckoutPage() {
         })
         .catch((e) => console.warn("Profile update warning:", e));
 
-      // Initiate Snippe USSD push BEFORE creating any order record (pay first)
+      // Initiate ClickPesa USSD push BEFORE creating any order record (pay first)
       const phone = normalizePhone(formData.phone);
-      const nameParts = formData.fullName.trim().split(/\s+/).filter(Boolean);
-      const initiateRes = await fetch("/api/snippe/initiate", {
+      const initiateRes = await fetch("/api/clickpesa/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: phone,
           amount: String(orderTotal),
           orderReference: orderRef,
-          firstname: nameParts[0] || "Customer",
-          lastname: nameParts.slice(1).join(" ") || nameParts[0] || "Customer",
-          customerEmail: formData.email,
         }),
       });
 
@@ -263,8 +259,6 @@ export function CheckoutPage() {
         setPaymentState("idle");
         return;
       }
-
-      const snippeReference: string = initiateData.reference;
 
       // Switch to waiting UI and start polling
       setPaymentState("waiting");
@@ -290,11 +284,11 @@ export function CheckoutPage() {
 
         try {
           const statusRes = await fetch(
-            `/api/snippe/status?paymentReference=${encodeURIComponent(snippeReference)}`,
+            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
           );
           const { status } = await statusRes.json();
 
-          if (status === "completed") {
+          if (status === "SUCCESS") {
             clearInterval(pollRef.current!);
             showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
 
@@ -314,16 +308,12 @@ export function CheckoutPage() {
             window.dispatchEvent(new Event("storage"));
             showToast("Agizo lako limekamilika!", "success", 5000);
             navigate("/profile");
-          } else if (
-            status === "failed" ||
-            status === "voided" ||
-            status === "expired"
-          ) {
+          } else if (status === "FAILED") {
             clearInterval(pollRef.current!);
             setPaymentState("failed");
             showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");
           }
-          // pending / active → keep polling
+          // PROCESSING → keep polling
         } catch (e) {
           console.error("Status poll error:", e);
         }
