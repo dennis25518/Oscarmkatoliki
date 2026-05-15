@@ -26,17 +26,17 @@ export function MpesaGuideModal({ amount, onClose }: MpesaGuideModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
-        <div className="bg-gradient-to-r from-red-500 to-orange-500 px-6 py-5 relative">
+        <div className="bg-gradient-to-r from-red-500 to-orange-500 px-6 py-4 relative flex-shrink-0">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-white/80 hover:text-white transition"
           >
             <FiX size={22} />
           </button>
-          <div className="text-3xl mb-2">🔧</div>
-          <h2 className="text-white font-bold text-xl leading-tight">
+          <div className="text-2xl mb-1">🔧</div>
+          <h2 className="text-white font-bold text-lg leading-tight">
             Huduma ya M-Pesa Iko Kwenye Matengenezo
           </h2>
           <p className="text-orange-100 text-sm mt-1">
@@ -45,11 +45,11 @@ export function MpesaGuideModal({ amount, onClose }: MpesaGuideModalProps) {
         </div>
 
         {/* Body */}
-        <div className="px-6 py-6 space-y-5">
+        <div className="px-6 py-5 space-y-4 overflow-y-auto flex-1">
           <p className="text-gray-700 text-sm leading-relaxed">
             Mpendwa mteja, kwa sasa malipo ya <strong>M-Pesa (Vodacom)</strong>{" "}
-            yanafanyiwa matengenezo na hayapatikani kupitia mfumo wetu.
-            Tafadhali tumia <strong>Lipa Namba</strong> yetu kupiga pesa moja kwa moja.
+            yanafanyiwa matengenezo.Tafadhali tumia <strong>Lipa Namba</strong>{" "}
+            yetu kukamilisha malipo moja kwa moja.
           </p>
 
           {/* Step 1 */}
@@ -120,13 +120,13 @@ export function MpesaGuideModal({ amount, onClose }: MpesaGuideModalProps) {
           </div>
 
           <p className="text-xs text-gray-400 text-center">
-            Tutashughulikia agizo lako mara tu baada ya kupokea uthibitisho wako.
-            Asante kwa uvumilivu wako! 🙏
+            Tutashughulikia agizo lako mara tu baada ya kupokea uthibitisho
+            wako. Asante kwa uvumilivu wako! 🙏
           </p>
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-5 pt-2 flex-shrink-0">
           <button
             onClick={onClose}
             className="w-full py-3 border-2 border-gray-200 text-gray-600 hover:bg-gray-50 font-semibold rounded-xl transition"

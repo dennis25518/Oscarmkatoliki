@@ -44,7 +44,9 @@ export function CheckoutPage() {
     null,
   );
   const [paymentState, setPaymentState] = React.useState<PaymentState>("idle");
-  const [preferredNetwork, setPreferredNetwork] = React.useState<string | null>(null);
+  const [preferredNetwork, setPreferredNetwork] = React.useState<string | null>(
+    null,
+  );
   const [showMpesaModal, setShowMpesaModal] = React.useState(false);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = React.useRef(0);

@@ -72,7 +72,9 @@ export function SadakaPage() {
 
   // M-Pesa manual payment modal
   const [showMpesaModal, setShowMpesaModal] = React.useState(false);
-  const [mpesaModalAmount, setMpesaModalAmount] = React.useState<number | undefined>(undefined);
+  const [mpesaModalAmount, setMpesaModalAmount] = React.useState<
+    number | undefined
+  >(undefined);
 
   // Success screen data
   const [successData, setSuccessData] = React.useState<{
