@@ -12,6 +12,7 @@ import { useToast } from "../components/Toast";
 import {
   orders,
   paymentMethods as paymentMethodsApi,
+  profiles as profilesApi,
   sadaka as sadakaApi,
 } from "../lib/supabaseClient";
 import type { PaymentMethod } from "../lib/supabaseClient";
@@ -55,10 +56,18 @@ export function SadakaPage() {
   const [loadingProfile, setLoadingProfile] = React.useState(false);
   const [hasNoPaymentMethod, setHasNoPaymentMethod] = React.useState(false);
 
+  // Registered user name (fetched from profile)
+  const [registeredName, setRegisteredName] = React.useState("");
+
   // Guest flow
   const [selectedProvider, setSelectedProvider] =
     React.useState<DonationProvider | null>(null);
   const [guestPhone, setGuestPhone] = React.useState("");
+  const [guestFirstName, setGuestFirstName] = React.useState("");
+  const [guestLastName, setGuestLastName] = React.useState("");
+
+  // Phone number actively being used for payment (shown in waiting UI)
+  const [pendingPhone, setPendingPhone] = React.useState("");
 
   // Success screen data
   const [successData, setSuccessData] = React.useState<{
@@ -75,13 +84,17 @@ export function SadakaPage() {
   React.useEffect(() => {
     if (!user) return;
     setLoadingProfile(true);
-    paymentMethodsApi.getPaymentMethods(user.id).then(({ data }) => {
-      if (data && data.length > 0) {
-        setSavedMethod(data[0]);
+    Promise.all([
+      paymentMethodsApi.getPaymentMethods(user.id),
+      profilesApi.getProfile(user.id),
+    ]).then(([{ data: methods }, { data: profile }]) => {
+      if (methods && methods.length > 0) {
+        setSavedMethod(methods[0]);
         setHasNoPaymentMethod(false);
       } else {
         setHasNoPaymentMethod(true);
       }
+      if (profile?.name) setRegisteredName(profile.name);
       setLoadingProfile(false);
     });
   }, [user]);
@@ -102,7 +115,12 @@ export function SadakaPage() {
     return "255" + cleaned;
   };
 
-  const handleDonate = async (provider: DonationProvider, phone: string) => {
+  const handleDonate = async (
+    provider: DonationProvider,
+    phone: string,
+    firstname: string,
+    lastname: string,
+  ) => {
     const donationAmount = getAmountToUse();
     if (!donationAmount || donationAmount < 500) {
       showToast("Tafadhali ingiza kiasi sahihi (angalau Tsh 500)", "warning");
@@ -112,25 +130,37 @@ export function SadakaPage() {
       showToast("Tafadhali ingiza nambari ya simu", "warning");
       return;
     }
+    if (!firstname.trim()) {
+      showToast("Tafadhali ingiza jina la kwanza", "warning");
+      return;
+    }
 
     setPaymentState("initiating");
 
     try {
       const normalizedPhone = normalizePhone(phone);
+      setPendingPhone(normalizedPhone);
       const orderRef = `DON${Date.now()}`;
       const providerInfo = PROVIDERS.find((p) => p.provider === provider)!;
 
-      const initiateRes = await fetch("/api/clickpesa/initiate", {
+      const initiateRes = await fetch("/api/snippe/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: normalizedPhone,
           amount: String(donationAmount),
           orderReference: orderRef,
+          firstname: firstname.trim(),
+          lastname: lastname.trim() || firstname.trim(),
+          customerEmail: user?.email,
         }),
       });
 
-      const initiateData = await initiateRes.json();
+      const initiateData = initiateRes.headers
+        .get("content-type")
+        ?.includes("application/json")
+        ? await initiateRes.json()
+        : { error: `Server error ${initiateRes.status}` };
 
       if (!initiateRes.ok) {
         showToast(initiateData.error || "Kosa la kuanzisha malipo", "error");
@@ -138,7 +168,13 @@ export function SadakaPage() {
         return;
       }
 
+      const snippeReference: string = initiateData.reference;
+
       setPaymentState("waiting");
+      showToast(
+        "Ombi limetumwa! Angalia simu yako na idhinisha malipo.",
+        "info",
+      );
 
       pollCountRef.current = 0;
       pollRef.current = setInterval(async () => {
@@ -156,11 +192,11 @@ export function SadakaPage() {
 
         try {
           const statusRes = await fetch(
-            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
+            `/api/snippe/status?paymentReference=${encodeURIComponent(snippeReference)}`,
           );
           const { status } = await statusRes.json();
 
-          if (status === "SUCCESS" || status === "SETTLED") {
+          if (status === "completed") {
             clearInterval(pollRef.current!);
 
             // Record donation – write to sadaka table + orders for history
@@ -209,7 +245,11 @@ export function SadakaPage() {
               providerImage: providerInfo.image,
             });
             setPaymentState("success");
-          } else if (status === "FAILED") {
+          } else if (
+            status === "failed" ||
+            status === "voided" ||
+            status === "expired"
+          ) {
             clearInterval(pollRef.current!);
             setPaymentState("failed");
             showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");
@@ -286,7 +326,10 @@ export function SadakaPage() {
                 setCustomAmount("");
                 setMessage("");
                 setGuestPhone("");
+                setGuestFirstName("");
+                setGuestLastName("");
                 setSelectedProvider(null);
+                setPendingPhone("");
               }}
               className="text-sm text-gray-400 hover:text-gray-600 transition mt-1"
             >
@@ -428,12 +471,28 @@ export function SadakaPage() {
                       </div>
                     </div>
                     <button
-                      onClick={() =>
+                      onClick={() => {
+                        const nameParts = (
+                          registeredName ||
+                          user?.user_metadata?.full_name ||
+                          user?.user_metadata?.name ||
+                          ""
+                        )
+                          .trim()
+                          .split(/\s+/)
+                          .filter(Boolean);
+                        const fn =
+                          nameParts[0] ||
+                          user?.email?.split("@")[0] ||
+                          "Mtoaji";
+                        const ln = nameParts.slice(1).join(" ") || fn;
                         handleDonate(
                           networkToProvider(savedMethod.network_name),
                           savedMethod.network_number ?? "",
-                        )
-                      }
+                          fn,
+                          ln,
+                        );
+                      }}
                       className="w-full py-4 bg-amber-700 hover:bg-amber-800 text-white font-bold text-lg rounded-xl transition"
                     >
                       Toa Sadaka ya Tsh {displayAmount.toLocaleString("sw-TZ")}
@@ -502,35 +561,71 @@ export function SadakaPage() {
                     </div>
 
                     {selectedProvider && (
-                      <div className="border-t border-gray-100 pt-6">
-                        <label className="block text-sm font-semibold text-black mb-2">
-                          <span className="flex items-center gap-2">
-                            <FiPhone size={16} />
-                            Ingiza Nambari ya Simu
-                          </span>
-                        </label>
-                        <div className="flex gap-3">
-                          <div className="flex items-center px-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm font-semibold">
-                            +255
-                          </div>
+                      <div className="border-t border-gray-100 pt-6 space-y-4">
+                        {/* First name */}
+                        <div>
+                          <label className="block text-sm font-semibold text-black mb-2">
+                            Jina la Kwanza
+                          </label>
                           <input
-                            type="tel"
-                            value={guestPhone}
-                            onChange={(e) => setGuestPhone(e.target.value)}
-                            placeholder="7XX XXX XXX"
-                            maxLength={12}
-                            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
+                            type="text"
+                            value={guestFirstName}
+                            onChange={(e) => setGuestFirstName(e.target.value)}
+                            placeholder="Mfano: John"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
                           />
                         </div>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Mfano: 0712345678 au 712345678
-                        </p>
+                        {/* Last name */}
+                        <div>
+                          <label className="block text-sm font-semibold text-black mb-2">
+                            Jina la Mwisho
+                          </label>
+                          <input
+                            type="text"
+                            value={guestLastName}
+                            onChange={(e) => setGuestLastName(e.target.value)}
+                            placeholder="Mfano: Doe"
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
+                          />
+                        </div>
+                        {/* Phone number */}
+                        <div>
+                          <label className="block text-sm font-semibold text-black mb-2">
+                            <span className="flex items-center gap-2">
+                              <FiPhone size={16} />
+                              Nambari ya Simu
+                            </span>
+                          </label>
+                          <div className="flex gap-3">
+                            <div className="flex items-center px-3 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 text-sm font-semibold">
+                              +255
+                            </div>
+                            <input
+                              type="tel"
+                              value={guestPhone}
+                              onChange={(e) => setGuestPhone(e.target.value)}
+                              placeholder="7XX XXX XXX"
+                              maxLength={12}
+                              className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-700"
+                            />
+                          </div>
+                          <p className="text-xs text-gray-400 mt-1">
+                            Mfano: 0712345678 au 712345678
+                          </p>
+                        </div>
                         <button
                           onClick={() =>
-                            handleDonate(selectedProvider, guestPhone)
+                            handleDonate(
+                              selectedProvider,
+                              guestPhone,
+                              guestFirstName,
+                              guestLastName,
+                            )
                           }
-                          disabled={!guestPhone.trim()}
-                          className="w-full mt-4 py-4 bg-amber-700 hover:bg-amber-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition"
+                          disabled={
+                            !guestPhone.trim() || !guestFirstName.trim()
+                          }
+                          className="w-full py-4 bg-amber-700 hover:bg-amber-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold text-lg rounded-xl transition"
                         >
                           Toa Sadaka ya Tsh{" "}
                           {displayAmount.toLocaleString("sw-TZ")}
@@ -581,12 +676,17 @@ export function SadakaPage() {
                 <p className="text-black font-bold text-xl mb-2">
                   Angalia Simu Yako
                 </p>
+                {pendingPhone && (
+                  <p className="text-sm font-semibold text-white bg-amber-700 rounded-lg px-4 py-2 mb-3 inline-block">
+                    +{pendingPhone}
+                  </p>
+                )}
                 <p className="text-gray-600 text-sm mb-4">
                   Ombi la sadaka ya{" "}
                   <span className="font-bold text-amber-700">
                     Tsh {displayAmount.toLocaleString("sw-TZ")}
                   </span>{" "}
-                  limetumwa. Idhinisha kwenye simu yako.
+                  limetumwa. Ingiza PIN yako kukubali.
                 </p>
                 <div className="flex items-center justify-center gap-2 mb-4">
                   <div className="animate-spin rounded-full h-5 w-5 border-2 border-amber-700 border-t-transparent" />

@@ -236,25 +236,35 @@ export function CheckoutPage() {
         })
         .catch((e) => console.warn("Profile update warning:", e));
 
-      // Initiate ClickPesa USSD push BEFORE creating any order record (pay first)
+      // Initiate Snippe USSD push BEFORE creating any order record (pay first)
       const phone = normalizePhone(formData.phone);
-      const initiateRes = await fetch("/api/clickpesa/initiate", {
+      const nameParts = formData.fullName.trim().split(/\s+/).filter(Boolean);
+      const initiateRes = await fetch("/api/snippe/initiate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           phoneNumber: phone,
           amount: String(orderTotal),
           orderReference: orderRef,
+          firstname: nameParts[0] || "Customer",
+          lastname: nameParts.slice(1).join(" ") || nameParts[0] || "Customer",
+          customerEmail: formData.email,
         }),
       });
 
-      const initiateData = await initiateRes.json();
+      const initiateData = initiateRes.headers
+        .get("content-type")
+        ?.includes("application/json")
+        ? await initiateRes.json()
+        : { error: `Server error ${initiateRes.status}` };
 
       if (!initiateRes.ok) {
         showToast(initiateData.error || "Kosa la kuanzisha malipo", "error");
         setPaymentState("idle");
         return;
       }
+
+      const snippeReference: string = initiateData.reference;
 
       // Switch to waiting UI and start polling
       setPaymentState("waiting");
@@ -280,11 +290,11 @@ export function CheckoutPage() {
 
         try {
           const statusRes = await fetch(
-            `/api/clickpesa/status?orderReference=${encodeURIComponent(orderRef)}`,
+            `/api/snippe/status?paymentReference=${encodeURIComponent(snippeReference)}`,
           );
           const { status } = await statusRes.json();
 
-          if (status === "SUCCESS" || status === "SETTLED") {
+          if (status === "completed") {
             clearInterval(pollRef.current!);
             showToast("Malipo yamekubaliwa! Inashuka vitabu...", "success");
 
@@ -304,12 +314,16 @@ export function CheckoutPage() {
             window.dispatchEvent(new Event("storage"));
             showToast("Agizo lako limekamilika!", "success", 5000);
             navigate("/profile");
-          } else if (status === "FAILED") {
+          } else if (
+            status === "failed" ||
+            status === "voided" ||
+            status === "expired"
+          ) {
             clearInterval(pollRef.current!);
             setPaymentState("failed");
             showToast("Malipo yalikataliwa. Tafadhali jaribu tena.", "error");
           }
-          // PROCESSING / PENDING → keep polling
+          // pending / active → keep polling
         } catch (e) {
           console.error("Status poll error:", e);
         }
