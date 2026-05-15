@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
 import { useToast } from "../components/Toast";
+import { MpesaGuideModal } from "../components/MpesaGuideModal";
 import {
   orders,
   paymentMethods as paymentMethodsApi,
@@ -68,6 +69,10 @@ export function SadakaPage() {
 
   // Phone number actively being used for payment (shown in waiting UI)
   const [pendingPhone, setPendingPhone] = React.useState("");
+
+  // M-Pesa manual payment modal
+  const [showMpesaModal, setShowMpesaModal] = React.useState(false);
+  const [mpesaModalAmount, setMpesaModalAmount] = React.useState<number | undefined>(undefined);
 
   // Success screen data
   const [successData, setSuccessData] = React.useState<{
@@ -136,6 +141,14 @@ export function SadakaPage() {
     }
 
     setPaymentState("initiating");
+
+    // M-Pesa (Vodacom) is not supported via USSD push — show manual guide
+    if (provider === "mpesa") {
+      setMpesaModalAmount(getAmountToUse());
+      setShowMpesaModal(true);
+      setPaymentState("idle");
+      return;
+    }
 
     try {
       const normalizedPhone = normalizePhone(phone);
@@ -334,6 +347,12 @@ export function SadakaPage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50 via-white to-orange-50 py-8 px-4">
+      {showMpesaModal && (
+        <MpesaGuideModal
+          amount={mpesaModalAmount}
+          onClose={() => setShowMpesaModal(false)}
+        />
+      )}
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
@@ -477,8 +496,16 @@ export function SadakaPage() {
                           user?.email?.split("@")[0] ||
                           "Mtoaji";
                         const ln = nameParts.slice(1).join(" ") || fn;
+                        const provider = networkToProvider(
+                          savedMethod.network_name,
+                        );
+                        if (provider === "mpesa") {
+                          setMpesaModalAmount(getAmountToUse());
+                          setShowMpesaModal(true);
+                          return;
+                        }
                         handleDonate(
-                          networkToProvider(savedMethod.network_name),
+                          provider,
                           savedMethod.network_number ?? "",
                           fn,
                           ln,

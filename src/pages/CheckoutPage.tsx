@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FiArrowLeft, FiUser, FiMail, FiPhone, FiMapPin } from "react-icons/fi";
 import { useAuth } from "../lib/AuthContext";
 import { useToast } from "../components/Toast";
+import { MpesaGuideModal } from "../components/MpesaGuideModal";
 import {
   orders,
   profiles,
@@ -43,6 +44,8 @@ export function CheckoutPage() {
     null,
   );
   const [paymentState, setPaymentState] = React.useState<PaymentState>("idle");
+  const [preferredNetwork, setPreferredNetwork] = React.useState<string | null>(null);
+  const [showMpesaModal, setShowMpesaModal] = React.useState(false);
   const pollRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = React.useRef(0);
 
@@ -116,6 +119,9 @@ export function CheckoutPage() {
         if (!methods || methods.length === 0) {
           // Redirect to profile if no payment method is set
           navigate("/profile?tab=payments");
+        } else {
+          const preferred = methods.find((m) => m.is_preferred) ?? methods[0];
+          setPreferredNetwork(preferred.network_name);
         }
       } catch (err) {
         console.error("Error loading user data:", err);
@@ -207,6 +213,13 @@ export function CheckoutPage() {
     }
 
     setPaymentState("initiating");
+
+    // M-Pesa (Vodacom) is not supported via USSD push — show manual guide
+    if (preferredNetwork === "M-Pesa") {
+      setPaymentState("idle");
+      setShowMpesaModal(true);
+      return;
+    }
 
     try {
       // Build order items
@@ -349,6 +362,12 @@ export function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      {showMpesaModal && (
+        <MpesaGuideModal
+          amount={calculateTotal()}
+          onClose={() => setShowMpesaModal(false)}
+        />
+      )}
       {/* Back Link */}
       <div className="px-4 sm:px-6 lg:px-8 py-4">
         <button
