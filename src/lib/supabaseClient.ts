@@ -50,6 +50,7 @@ export interface PaymentMethod {
   user_id: string;
   network_name: string;
   network_number: string | null;
+  is_preferred?: boolean;
 }
 
 export interface Product {
@@ -111,7 +112,12 @@ export const auth = {
   },
 
   async signInWithGoogle() {
-    const redirectUrl = `${window.location.origin}/`;
+    const isProd =
+      window.location.hostname !== "localhost" &&
+      !window.location.hostname.includes("127.0.0.1");
+    const redirectUrl = isProd
+      ? "https://www.oscarmkatoliki.co.tz/"
+      : `${window.location.origin}/`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -236,37 +242,45 @@ export const paymentMethods = {
     const { data, error } = await supabase
       .from("payment_methods")
       .select("*")
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .order("is_preferred", { ascending: false });
     return { data, error };
   },
 
   async addPaymentMethod(method: Omit<PaymentMethod, "id">) {
-    // Check if user already has a payment method
-    const { data: existingMethods, error: fetchError } = await supabase
+    // Check if this is the first method – auto-set as preferred
+    const { data: existing } = await supabase
       .from("payment_methods")
       .select("id")
       .eq("user_id", method.user_id);
 
-    if (fetchError) return { data: null, error: fetchError };
+    const isFirst = !existing || existing.length === 0;
 
-    if (existingMethods && existingMethods.length > 0) {
-      // Update existing record
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .update(method)
-        .eq("user_id", method.user_id)
-        .select()
-        .single();
-      return { data, error };
-    } else {
-      // Create new record
-      const { data, error } = await supabase
-        .from("payment_methods")
-        .insert([method])
-        .select()
-        .single();
-      return { data, error };
-    }
+    const { data, error } = await supabase
+      .from("payment_methods")
+      .insert([{ ...method, is_preferred: isFirst }])
+      .select()
+      .single();
+    return { data, error };
+  },
+
+  async setPreferredPaymentMethod(methodId: string, userId: string) {
+    // Unset all preferred for this user first
+    const { error: unsetError } = await supabase
+      .from("payment_methods")
+      .update({ is_preferred: false })
+      .eq("user_id", userId);
+
+    if (unsetError) return { error: unsetError };
+
+    // Set the chosen one as preferred
+    const { data, error } = await supabase
+      .from("payment_methods")
+      .update({ is_preferred: true })
+      .eq("id", methodId)
+      .select()
+      .single();
+    return { data, error };
   },
 
   async deletePaymentMethod(methodId: string) {

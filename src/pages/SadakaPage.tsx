@@ -89,7 +89,7 @@ export function SadakaPage() {
       profilesApi.getProfile(user.id),
     ]).then(([{ data: methods }, { data: profile }]) => {
       if (methods && methods.length > 0) {
-        setSavedMethod(methods[0]);
+        setSavedMethod(methods.find((m) => m.is_preferred) ?? methods[0]);
         setHasNoPaymentMethod(false);
       } else {
         setHasNoPaymentMethod(true);

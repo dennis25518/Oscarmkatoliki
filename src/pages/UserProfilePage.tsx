@@ -13,13 +13,17 @@ import {
   FiMapPin,
   FiLogOut,
   FiEdit2,
+  FiDownload,
+  FiStar,
 } from "react-icons/fi";
 import { ProfileSkeleton } from "../components/Skeleton";
 import { useAuth } from "../lib/AuthContext";
+import { useToast } from "../components/Toast";
 import {
   profiles,
   orders as ordersApi,
   paymentMethods as paymentMethodsApi,
+  products as productsApi,
   storage,
 } from "../lib/supabaseClient";
 
@@ -76,7 +80,11 @@ export function UserProfilePage() {
     profile_picture: null,
   });
 
+  const { showToast } = useToast();
   const [orders, setOrders] = React.useState<Order[]>([]);
+  const [downloadingItem, setDownloadingItem] = React.useState<string | null>(
+    null,
+  );
   const [paymentMethods, setPaymentMethods] = React.useState<PaymentMethod[]>(
     [],
   );
@@ -267,9 +275,35 @@ export function UserProfilePage() {
         await paymentMethodsApi.deletePaymentMethod(id);
       if (deleteError) throw deleteError;
 
-      setPaymentMethods((prev) => prev.filter((p) => p.id !== id));
+      const updated = paymentMethods.filter((p) => p.id !== id);
+      // If we deleted the preferred one, auto-prefer the next
+      if (updated.length > 0 && !updated.some((p) => p.is_preferred) && user) {
+        await paymentMethodsApi.setPreferredPaymentMethod(
+          updated[0].id!,
+          user.id,
+        );
+        const { data } = await paymentMethodsApi.getPaymentMethods(user.id);
+        setPaymentMethods(data || []);
+      } else {
+        setPaymentMethods(updated);
+      }
     } catch (err: any) {
       setError("Kosa la kufuta njia ya malipo: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSetPreferred = async (id: string) => {
+    if (!user) return;
+    try {
+      setSaving(true);
+      setError("");
+      await paymentMethodsApi.setPreferredPaymentMethod(id, user.id);
+      const { data } = await paymentMethodsApi.getPaymentMethods(user.id);
+      setPaymentMethods(data || []);
+    } catch (err: any) {
+      setError("Kosa la kuweka kipendwa: " + err.message);
     } finally {
       setSaving(false);
     }
@@ -298,6 +332,52 @@ export function UserProfilePage() {
         return "Cancelled";
       default:
         return status;
+    }
+  };
+
+  const downloadFile = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleRedownload = async (
+    orderId: string,
+    item: Order["items"][number],
+    idx: number,
+  ) => {
+    const key = `${orderId}-${idx}`;
+    setDownloadingItem(key);
+    try {
+      const { data: product } = await productsApi.getProduct(
+        parseInt(item.product_id),
+      );
+      if (!product?.file_url) {
+        showToast("Faili halipatikani", "error");
+        return;
+      }
+      const safeFileName = `${item.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.pdf`;
+      await downloadFile(product.file_url, safeFileName);
+    } catch {
+      showToast("Kosa la kupakua faili", "error");
+    } finally {
+      setDownloadingItem(null);
     }
   };
 
@@ -683,12 +763,36 @@ export function UserProfilePage() {
                                     Kiasi: {item.quantity}
                                   </p>
                                 </div>
-                                <p className="text-sm font-bold text-amber-700">
-                                  Tsh{" "}
-                                  {(item.price * item.quantity).toLocaleString(
-                                    "sw-TZ",
-                                  )}
-                                </p>
+                                <div className="flex items-center gap-3">
+                                  <p className="text-sm font-bold text-amber-700">
+                                    Tsh{" "}
+                                    {(
+                                      item.price * item.quantity
+                                    ).toLocaleString("sw-TZ")}
+                                  </p>
+                                  {order.status === "completed" &&
+                                    item.product_id !== "donation" && (
+                                      <button
+                                        onClick={() =>
+                                          handleRedownload(order.id, item, idx)
+                                        }
+                                        disabled={
+                                          downloadingItem ===
+                                          `${order.id}-${idx}`
+                                        }
+                                        title="Pakua Tena"
+                                        className="flex items-center gap-1 px-3 py-1.5 bg-amber-700 hover:bg-amber-800 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition"
+                                      >
+                                        {downloadingItem ===
+                                        `${order.id}-${idx}` ? (
+                                          <div className="animate-spin rounded-full h-3 w-3 border-2 border-white border-t-transparent" />
+                                        ) : (
+                                          <FiDownload size={13} />
+                                        )}
+                                        Pakua
+                                      </button>
+                                    )}
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -814,7 +918,11 @@ export function UserProfilePage() {
                           return (
                             <div
                               key={payment.id || "payment-method"}
-                              className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:shadow-md transition bg-gradient-to-r from-amber-50 to-transparent"
+                              className={`flex items-center justify-between p-4 border rounded-lg hover:shadow-md transition bg-gradient-to-r from-amber-50 to-transparent ${
+                                payment.is_preferred
+                                  ? "border-amber-400 ring-1 ring-amber-300"
+                                  : "border-gray-200"
+                              }`}
                             >
                               <div className="flex items-center gap-4">
                                 {networkImg ? (
@@ -838,9 +946,23 @@ export function UserProfilePage() {
                                   <p className="text-sm text-gray-600">
                                     +255{payment.network_number?.slice(-7)}
                                   </p>
-                                  <span className="inline-block text-xs font-semibold text-green-700 mt-1">
-                                    Simu ya Pesa
-                                  </span>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {payment.is_preferred ? (
+                                      <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 border border-amber-300 rounded-full px-2 py-0.5">
+                                        <FiStar size={10} /> Inapendelewa
+                                      </span>
+                                    ) : (
+                                      <button
+                                        onClick={() =>
+                                          handleSetPreferred(payment.id!)
+                                        }
+                                        disabled={saving}
+                                        className="inline-flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-amber-700 hover:bg-amber-50 border border-gray-200 hover:border-amber-300 rounded-full px-2 py-0.5 transition disabled:opacity-50"
+                                      >
+                                        <FiStar size={10} /> Weka Kipendwa
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
                               <button
